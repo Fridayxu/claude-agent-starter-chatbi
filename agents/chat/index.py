@@ -58,35 +58,21 @@ HEARTBEAT_INTERVAL_S = 5
 MCP_SERVER_NAME = "edgeone"
 
 SYSTEM_PROMPT = (
-  'You are ChatBI Agent, an intelligent supply chain data analyst powered by EdgeOne Makers Claude Agent SDK.\n'
-  'Your mission: automatically parse files, extract data, analyze it, and generate reports — all through natural language.\n\n'
-  '## Core Identity\n'
-  '- You are a professional supply chain data analyst, not a general-purpose assistant.\n'
-  '- You speak Chinese when the user writes Chinese; English otherwise.\n'
-  '- Be concise: for greetings, reply in 5 words or fewer. No capability lists unless asked.\n\n'
-  '## Available Platform Tools (Sandbox)\n'
-  '- files: read/write/list/delete files in the sandbox. Use this FIRST when a user uploads data.\n'
-  '- code_interpreter: run Python code. Use for EDA, forecasting, statistics, visualization.\n'
-  '- commands: execute shell commands. Use for pip install, file inspection, data processing.\n'
-  '- browser: fetch external data or web pages when needed.\n\n'
-  '## Project Skills (auto-loaded by Claude Agent SDK)\n'
-  '- chatbi-analysis: core supply chain analysis methodology. Load this for ANY data analysis task.\n'
-  '  Covers: EDA, demand forecasting, ABC/XYZ classification, inventory optimization, pricing analysis.\n'
-  '- chatbi-harness: the Harness Engineering 6-layer framework. Reference for task specs, workflows,\n'
-  '  quality gates, and validation rules. Load when doing multi-step or complex analysis.\n\n'
-  '## Analysis Workflow (MANDATORY for any data task)\n'
-  '1. When user uploads a file: use `files` tool to list and read it FIRST.\n'
-  '2. Use `code_interpreter` (Python) for analysis. Install packages with `commands` tool (pip install).\n'
-  '3. For multi-step analysis, reference harness/spec/tasks/ for the task specification.\n'
-  '4. After analysis: present key findings as a structured report with numbers.\n'
-  '5. Suggest next steps based on findings.\n\n'
-  '## CRITICAL Rules\n'
-  '- Always read uploaded files with the `files` tool before analyzing.\n'
-  '- Use real tools — never simulate or invent tool results.\n'
-  '- For charts: save to sandbox filesystem, I will display them.\n'
-  '- Use dark-themed matplotlib styles for charts.\n'
-  '- If a tool fails, explain the error and suggest alternatives.\n'
-  '- For large files (>10K rows): use sampling or chunked processing.'
+  'You are ChatBI, a supply chain data analyst. Be concise and professional.\n'
+  'Speak Chinese to Chinese-speaking users.\n\n'
+  '## Tools\n'
+  '- code_interpreter: Run Python. Files are saved to /tmp/user-code/<filename>. Use open() to read them.\n'
+  '- commands: Run shell commands (ls, pip install, wc, head, etc).\n'
+  '- files: Sandbox file operations (list/read/write).\n'
+  '- browser: Fetch web pages.\n\n'
+  '## Workflow for Data Analysis\n'
+  '1. Use commands: `ls /tmp/user-code/` to see uploaded files, `head` to preview.\n'
+  '2. Use code_interpreter (Python csv module) for analysis. Install pkgs via commands: `pip install pandas`.\n'
+  '3. Present results: key numbers first, then details. Format as report.\n\n'
+  '## Rules\n'
+  '- NEVER retry a failed tool — try a different approach.\n'
+  '- NEVER simulate results. Use real tools.\n'
+  '- Greetings: reply in ≤5 words. No feature lists.'
 )
 
 
@@ -168,7 +154,7 @@ def build_agent_options(
         setting_sources=["project"],
         skills="all",
         permission_mode="dontAsk",
-        max_turns=5,
+        max_turns=15,
         env=collect_gateway_env(),
         include_partial_messages=True,
         max_buffer_size=20 * 1024 * 1024,  # 20MB — enough for browser screenshots
@@ -191,12 +177,12 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     user_message: str = body.get("message", "") if isinstance(body, dict) else ""
     uploaded_files: list[dict] = body.get("files", []) if isinstance(body, dict) else []
 
-    # Handle file uploads — save to sandbox before processing
+    # Handle file uploads — save to /tmp/user-code/, tell model exact paths
     if uploaded_files:
         import base64, os as _os
         sandbox_dir = "/tmp/user-code"
         _os.makedirs(sandbox_dir, exist_ok=True)
-        file_names = []
+        file_paths = []
         for f in uploaded_files:
             fname = f.get("name", "uploaded_file")
             fcontent = f.get("content", "")
@@ -205,15 +191,18 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
                 raw = base64.b64decode(fcontent)
                 with open(fpath, "wb") as fh:
                     fh.write(raw)
-                file_names.append(fname)
-                logger.log(f"[file] saved {fname} ({len(raw)} bytes) to {fpath}")
+                file_paths.append(fpath)
+                logger.log(f"[file] saved {fname} ({len(raw)} bytes)")
             except Exception as e:
                 logger.error(f"[file] failed to save {fname}: {e}")
 
-        if file_names and not user_message.strip():
-            user_message = f"I have uploaded these files: {', '.join(file_names)}. Please read and analyze them."
-        elif file_names:
-            user_message = f"[Uploaded files: {', '.join(file_names)}]\n\n{user_message}"
+        if file_paths:
+            file_list = '\n'.join(f'  - {p}' for p in file_paths)
+            sizes = f" ({sum(1 for _ in file_paths)} files)"
+            if not user_message.strip():
+                user_message = f"Files uploaded to{sizes}:\n{file_list}\n\nRead these files with code_interpreter (Python open()) and analyze them."
+            else:
+                user_message = f"Files uploaded to{sizes}:\n{file_list}\n\nUser request: {user_message}"
 
     if not user_message.strip():
         yield sse_event("error", {"message": "'message' or 'files' is required"})
