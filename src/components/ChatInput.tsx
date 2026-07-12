@@ -60,12 +60,33 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
         alert(`File too large: ${file.name} (${(file.size/1024/1024).toFixed(1)}MB). Max 50MB.`);
         continue;
       }
+      const isLarge = file.size > 800 * 1024; // >800KB: sample to keep request body <1MB
       const reader = new FileReader();
       reader.onload = () => {
-        const b64 = (reader.result as string).split(',')[1];
-        setFiles(prev => [...prev, { name: file.name, content: b64, mimeType: file.type || 'text/csv' }]);
+        let content: string;
+        let displayName = file.name;
+        if (isLarge && (file.type.includes('text') || file.type.includes('csv') || file.name.endsWith('.csv') || file.name.endsWith('.txt'))) {
+          // Sample: take first ~500KB of text (≈8K-10K rows), then base64
+          const text = reader.result as string;
+          const sample = text.substring(0, 500 * 1024);
+          const lines = sample.split('\n').length;
+          content = btoa(unescape(encodeURIComponent(sample)));
+          displayName = `${file.name} (sampled: first ${lines} lines, ${(sample.length/1024).toFixed(0)}KB)`;
+        } else if (isLarge) {
+          // Binary large file: read only first 500KB
+          const b64Full = (reader.result as string).split(',')[1] || '';
+          content = b64Full.substring(0, 650 * 1024); // ~500KB decoded
+          displayName = `${file.name} (sampled: first ~500KB)`;
+        } else {
+          content = (reader.result as string).split(',')[1] || '';
+        }
+        setFiles(prev => [...prev, { name: displayName, content, mimeType: file.type || 'text/csv' }]);
       };
-      reader.readAsDataURL(file);
+      if (isLarge && (file.type.includes('text') || file.type.includes('csv') || file.name.endsWith('.csv') || file.name.endsWith('.txt'))) {
+        reader.readAsText(file);
+      } else {
+        reader.readAsDataURL(file);
+      }
     }
     if (e.target) e.target.value = '';
   };
