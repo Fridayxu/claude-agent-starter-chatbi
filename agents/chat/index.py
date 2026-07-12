@@ -23,6 +23,7 @@ Tools:
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import time
 from typing import Any, AsyncGenerator
@@ -56,6 +57,10 @@ from ._stream import (
 logger = create_logger("chat")
 HEARTBEAT_INTERVAL_S = 5
 MCP_SERVER_NAME = "edgeone"
+
+# Module-level file cache: conversation_id → [{name, content_b64, mimeType}]
+# Files are re-written to sandbox /tmp/ on every request (sandbox /tmp/ is ephemeral).
+_file_cache: dict[str, list[dict]] = {}
 
 SYSTEM_PROMPT = (
   'You are ChatBI, a supply chain data analyst. Be concise and professional.\n'
@@ -177,36 +182,70 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     user_message: str = body.get("message", "") if isinstance(body, dict) else ""
     uploaded_files: list[dict] = body.get("files", []) if isinstance(body, dict) else []
 
-    # Handle file uploads — embed as base64 for code_interpreter to decode
+    # Handle file uploads — write to sandbox via ctx.sandbox.files.write()
+    file_paths: list[str] = []
     if uploaded_files:
-        file_blocks = []
+        # Cache files for this conversation (sandbox /tmp/ is ephemeral across requests)
+        if cid not in _file_cache:
+            _file_cache[cid] = []
         for f in uploaded_files:
-            fname = f.get("name", "uploaded_file")
-            fcontent = f.get("content", "")
-            fmime = f.get("mimeType", "text/csv")
-            fsize = len(fcontent) * 3 // 4
-            truncated = len(fcontent) > 130000
-            display = fcontent[:130000] if truncated else fcontent
-            note = f"\n(truncated to ~100KB; original ~{fsize} bytes)" if truncated else ""
-            file_blocks.append(
-                f"### {fname} (~{fsize} bytes, {fmime}){note}\n"
-                f"```base64\n{display}\n```"
-            )
-        file_section = (
-            "## Uploaded Files (base64-encoded)\n"
-            "Decode in code_interpreter:\n"
-            "```python\nimport base64, io, csv\n"
-            "data = base64.b64decode('<content>')\n"
-            "reader = csv.DictReader(io.StringIO(data.decode()))\n"
-            "rows = list(reader)\n```\n\n"
-        ) + "\n".join(file_blocks)
+            _file_cache[cid].append({
+                "name": f.get("name", "uploaded_file"),
+                "content": f.get("content", ""),
+                "mimeType": f.get("mimeType", "text/csv"),
+            })
 
-        if not user_message.strip():
-            user_message = file_section + "\nDecode and analyze these files."
-        else:
-            user_message = file_section + f"\n## Request\n{user_message}"
+    # Re-write cached files to sandbox on every request (sandbox /tmp/ may be cleaned)
+    if cid and cid in _file_cache:
+        sandbox = getattr(ctx, "sandbox", None)
+        for f in _file_cache[cid]:
+            fname = f["name"]
+            b64 = f["content"]
+            mime = f["mimeType"]
+            fpath = f"/tmp/{fname}"
 
-        logger.log(f"[file] embedded {len(uploaded_files)} file(s), total {sum(len(f.get('content','')) for f in uploaded_files)} b64 chars")
+            try:
+                raw = base64.b64decode(b64)
+                # Text files (CSV, JSON, TXT): write via sandbox.files.write (UTF-8 only)
+                if mime and ("csv" in mime or "json" in mime or "text" in mime or "txt" in mime):
+                    text = raw.decode("utf-8", errors="replace")
+                    if sandbox and hasattr(sandbox, "files"):
+                        await sandbox.files.write(fpath, text)
+                        logger.log(f"[sandbox] wrote {fname} ({len(text)} chars) to {fpath}")
+                    else:
+                        # Fallback: embed in message (sandbox unavailable)
+                        truncated = text[:50000]
+                        user_message = f"[File: {fname}]\n{truncated}\n\n{user_message}"
+                        logger.log(f"[fallback] embedded {fname} ({len(truncated)} chars) in message")
+                else:
+                    # Binary files (Excel etc): write base64, decode in sandbox via commands
+                    if sandbox and hasattr(sandbox, "files"):
+                        await sandbox.files.write(fpath + ".b64", b64)
+                        logger.log(f"[sandbox] wrote {fname}.b64 ({len(b64)} b64 chars) to {fpath}.b64")
+                        file_paths.append(f"{fpath}.b64 (base64-encoded, decode with: base64 -d {fpath}.b64 > {fpath})")
+                        continue
+                    else:
+                        truncated = b64[:50000]
+                        user_message = f"[Binary file: {fname}]\n```base64\n{truncated}\n```\n\n{user_message}"
+                        logger.log(f"[fallback] embedded binary {fname} in message")
+                        continue
+
+                file_paths.append(fpath)
+            except Exception as e:
+                logger.error(f"[sandbox] failed to write {fname}: {e}")
+                # Last resort: embed truncated content
+                truncated = b64[:30000]
+                user_message = f"[File: {fname} (write failed: {e})]\n```base64\n{truncated}\n```\n\n{user_message}"
+
+        if file_paths:
+            path_list = "\n".join(f"  - {p}" for p in file_paths)
+            file_note = f"Files in sandbox:\n{path_list}\n\nRead with code_interpreter: `open('/tmp/filename')`\n\n"
+            if not user_message.strip():
+                user_message = file_note + "Analyze these files."
+            else:
+                user_message = file_note + user_message
+
+    logger.log(f"[file] {len(file_paths)} files in sandbox, message size={len(user_message)} chars")
 
     if not user_message.strip():
         yield sse_event("error", {"message": "'message' or 'files' is required"})
