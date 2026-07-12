@@ -368,3 +368,25 @@
     animation: none;
   }
 }
+
+/* Dashboard preview button */
+.dashboardButtons { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.dashboardRow { display: flex; align-items: center; gap: 8px; }
+.dashboardBtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--accent-gold);
+  background: var(--accent-gold-dim);
+  color: var(--accent-gold);
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, transform .15s, box-shadow .15s;
+}
+.dashboardBtn:hover {
+  background: rgba(224,170,79,.2);
+  transform: translateY(-1px);
+  box-shadow: 0 0 16px var(--accent-gold-glow);
+}
