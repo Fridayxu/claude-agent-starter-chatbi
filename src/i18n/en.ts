@@ -1,23 +1,21 @@
 const en = {
   // Header
-  "app.title": "Claude Agent Starter",
-  "app.subtitle": "Running on EdgeOne Makers with sandbox tools, session memory & observability",
+  "app.title": "ChatBI Agent",
+  "app.subtitle": "Supply Chain Data Analyst · Natural Language to Data Reports",
 
   // Empty state
-  "empty.title": "Claude Agent Starter",
-  "empty.hint": "I'm a Claude assistant running on EdgeOne. I can call sandbox tools, persist session memory, and help you with debugging, file management, code execution, and web browsing.",
-  "empty.features": "Sandbox Tools · Store Memory · Observability",
+  "empty.title": "ChatBI — Supply Chain Analyst",
+  "empty.hint": "Upload CSV/Excel data files, describe your analysis needs in natural language. I'll handle EDA, forecasting, inventory optimization, pricing strategy, and generate structured reports.",
+  "empty.features": "Sandbox Python · Session Memory · Harness Framework · Auto Reports",
 
   // Chat input
-  "chat.placeholder": "Type a message...  ⏎ Send · Shift+⏎ Newline",
-  "chat.hint": "Powered by Claude Agent SDK + EdgeOne Makers · Demo only",
+  "chat.placeholder": "Upload data and describe your analysis...  ⏎ Send · Shift+⏎ Newline",
+  "chat.hint": "ChatBI Agent · Claude Agent SDK + EdgeOne Makers + Harness Engineering",
 
   // Preset questions
-  "preset.1": "Use terminal commands to check the current system time and OS version.",
-  "preset.2": "Create /tmp/fib.py, write Python code to calculate the first 10 Fibonacci numbers, execute it, and print the result.",
-  "preset.4": "Visit https://edgeone.ai and summarize the page content.",
-  "preset.screenshotEdgeOne": "Take a screenshot of edgeone.ai.",
-  "preset.skill.sandboxAlgorithms": "Calculate the first 20 Fibonacci numbers and provide the execution result.",
+  "preset.1": "Upload a CSV and run Exploratory Data Analysis (EDA)",
+  "preset.2": "Forecast demand based on historical sales data",
+  "preset.3": "Perform ABC/XYZ inventory classification",
 
   // Tool indicators
   "tool.commands": "Commands",

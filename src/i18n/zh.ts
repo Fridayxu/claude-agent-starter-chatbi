@@ -1,23 +1,21 @@
 const zh = {
   // Header
-  "app.title": "Claude Agent Starter",
-  "app.subtitle": "运行在 EdgeOne Makers 环境中，支持沙箱工具、会话记忆与可观测",
+  "app.title": "ChatBI Agent",
+  "app.subtitle": "供应链数据分析智能体 · 自然语言驱动的数据报表生成",
 
   // Empty state
-  "empty.title": "Claude Agent Starter",
-  "empty.hint": "我是运行在 EdgeOne 环境中的 Claude 助手，可以调用沙箱工具、保存会话记忆，并帮助你完成各项任务。",
-  "empty.features": "沙箱工具 · Store 会话记忆 · 自动可观测",
+  "empty.title": "ChatBI — 供应链数据分析助手",
+  "empty.hint": "上传 CSV/Excel 数据文件，用自然语言描述分析需求，我将自动完成数据探索、预测分析、库存优化、定价策略等任务。",
+  "empty.features": "沙箱Python分析 · 会话记忆 · Harness六层架构 · 自动报表",
 
   // Chat input
-  "chat.placeholder": "发消息…  ⏎ 发送 · Shift+⏎ 换行",
-  "chat.hint": "由 Claude Agent SDK + EdgeOne Makers 驱动 · 仅供演示",
+  "chat.placeholder": "上传数据文件，输入分析需求…  ⏎ 发送 · Shift+⏎ 换行",
+  "chat.hint": "ChatBI Agent · Claude Agent SDK + EdgeOne Makers + Harness Engineering",
 
   // Preset questions
-  "preset.1": "使用终端命令检查当前系统时间和操作系统版本。",
-  "preset.2": "创建 /tmp/fib.py，写入计算斐波那契数列前 10 项的 Python 代码并执行，将结果打印出来。",
-  "preset.4": "访问 https://edgeone.ai 并总结页面内容。",
-  "preset.screenshotEdgeOne": "截取 edgeone.ai 的网页图片。",
-  "preset.skill.sandboxAlgorithms": "计算斐波那契数列前 20 个，并给出执行结果。",
+  "preset.1": "上传CSV文件并进行数据探索分析(EDA)",
+  "preset.2": "基于销售数据做需求预测",
+  "preset.3": "对库存进行ABC/XYZ分类分析",
 
   // Tool indicators
   "tool.commands": "终端命令",

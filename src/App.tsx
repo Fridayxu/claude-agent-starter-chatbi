@@ -400,14 +400,20 @@ function AppInner() {
     abortCtrlRef.current = null;
   }, []);
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (text: string, files: Array<{name:string,content:string,mimeType:string}>) => {
     initDoneRef.current = true;
     setRightPanelMode('debug');
+
+    let displayText = text;
+    if (files.length) {
+      const names = files.map(f => `📄 ${f.name}`).join(', ');
+      displayText = text ? `${names}\n${text}` : names;
+    }
 
     const userMsg: Message = {
       id: crypto.randomUUID(),
       role: 'user',
-      content: text,
+      content: displayText,
       timestamp: Date.now(),
     };
 
@@ -600,7 +606,7 @@ function AppInner() {
         updateBotMessage(content => content || t("status.error"));
         finishStream();
       },
-    }, conversationIdRef.current, { userMsgId: userMsg.id, botMsgId }, eoUuidRef.current);
+    }, conversationIdRef.current, { userMsgId: userMsg.id, botMsgId }, eoUuidRef.current, files.length > 0 ? files : undefined);
 
     abortCtrlRef.current = ctrl;
   }, [updateBotMessage, setBotActivity, finishBotActivity, clearBotStreaming, handleImageEvent, finishStream, refreshConversations, t]);

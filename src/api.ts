@@ -94,6 +94,7 @@ export function sendMessageStream(
   conversationId?: string,
   messageIds?: { userMsgId: string; botMsgId: string },
   userId?: string,
+  files?: Array<{name:string,content:string,mimeType:string}>,
 ): AbortController {
   const ctrl = new AbortController();
 
@@ -106,15 +107,20 @@ export function sendMessageStream(
         headers['makers-conversation-id'] = conversationId;
       }
 
+      const body: Record<string, unknown> = {
+        message,
+        userMsgId: messageIds?.userMsgId,
+        botMsgId: messageIds?.botMsgId,
+        userId,
+      };
+      if (files && files.length > 0) {
+        body.files = files;
+      }
+
       const res = await fetch(API.chat, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          message,
-          userMsgId: messageIds?.userMsgId,
-          botMsgId: messageIds?.botMsgId,
-          userId,
-        }),
+        body: JSON.stringify(body),
         signal: ctrl.signal,
       });
 

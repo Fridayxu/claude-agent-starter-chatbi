@@ -1,30 +1,39 @@
-import { useState, useRef, useCallback, KeyboardEvent } from 'react';
+import { useState, useRef, useCallback, KeyboardEvent, ChangeEvent } from 'react';
 import { useT, MessageKeys } from '../i18n';
 import styles from './ChatInput.module.css';
 
+export interface FileInfo {
+  name: string;
+  content: string;
+  mimeType: string;
+}
+
 interface Props {
-  onSend: (text: string) => void;
+  onSend: (text: string, files: FileInfo[]) => void;
   onStop: () => void;
   onClear: () => void;
   disabled: boolean;
 }
 
-const PRESET_KEYS = ['preset.1', 'preset.screenshotEdgeOne', 'preset.skill.sandboxAlgorithms'] as const;
+const PRESET_KEYS = ['preset.1', 'preset.2', 'preset.3'] as const;
 
 export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) {
   const [value, setValue] = useState('');
+  const [files, setFiles] = useState<FileInfo[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useT();
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed || disabled) return;
-    onSend(trimmed);
+    if ((!trimmed && !files.length) || disabled) return;
+    onSend(trimmed, files);
     setValue('');
+    setFiles([]);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [value, disabled, onSend]);
+  }, [value, files, disabled, onSend]);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -42,11 +51,47 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
 
   const handlePreset = (text: string) => {
     if (disabled) return;
-    onSend(text);
+    onSend(text, []);
+  };
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    for (const file of e.target.files || []) {
+      if (file.size > 50 * 1024 * 1024) {
+        alert(`File too large: ${file.name} (${(file.size/1024/1024).toFixed(1)}MB). Max 50MB.`);
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const b64 = (reader.result as string).split(',')[1];
+        setFiles(prev => [...prev, { name: file.name, content: b64, mimeType: file.type || 'text/csv' }]);
+      };
+      reader.readAsDataURL(file);
+    }
+    if (e.target) e.target.value = '';
+  };
+
+  const removeFile = (idx: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== idx));
   };
 
   return (
     <div className={styles.bar}>
+      {/* File tags */}
+      {files.length > 0 && (
+        <div className={styles.fileTags}>
+          {files.map((f, i) => {
+            const ext = (f.name || '').split('.').pop()?.toUpperCase() || 'FILE';
+            return (
+              <span key={i} className={styles.fileTag}>
+                <span className={styles.fileTagName}>📄 {f.name}</span>
+                <span className={styles.fileTagExt}>{ext}</span>
+                <button className={styles.fileTagRem} onClick={() => removeFile(i)} aria-label={`Remove ${f.name}`}>×</button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       <div className={styles.presets}>
         {PRESET_KEYS.map(key => (
           <button
@@ -61,10 +106,31 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
       </div>
 
       <div className={`${styles.inputWrap} ${disabled ? styles.inputDisabled : ''}`}>
+        {/* File upload button */}
+        <button
+          className={styles.fileBtn}
+          onClick={() => fileInputRef.current?.click()}
+          disabled={disabled}
+          aria-label="Attach file"
+          title="Attach CSV/Excel file"
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".csv,.xlsx,.xls,.json,.txt"
+          multiple
+          onChange={handleFileChange}
+          style={{ display: 'none' }}
+        />
+
         <textarea
           ref={textareaRef}
           className={styles.textarea}
-          placeholder={t("chat.placeholder")}
+          placeholder={disabled ? "ChatBI is replying..." : t("chat.placeholder")}
           value={value}
           onChange={e => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -73,9 +139,9 @@ export default function ChatInput({ onSend, onStop, onClear, disabled }: Props) 
           disabled={disabled}
         />
         <button
-          className={`${styles.sendBtn} ${(!value.trim() || disabled) ? styles.sendDisabled : ''}`}
+          className={`${styles.sendBtn} ${(!value.trim() && !files.length) || disabled ? styles.sendDisabled : ''}`}
           onClick={handleSend}
-          disabled={!value.trim() || disabled}
+          disabled={(!value.trim() && !files.length) || disabled}
           aria-label={t("aria.send")}
         >
           <svg viewBox="0 0 20 20" fill="none" width="16" height="16">
