@@ -177,32 +177,36 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     user_message: str = body.get("message", "") if isinstance(body, dict) else ""
     uploaded_files: list[dict] = body.get("files", []) if isinstance(body, dict) else []
 
-    # Handle file uploads — save to /tmp/user-code/, tell model exact paths
+    # Handle file uploads — embed as base64 for code_interpreter to decode
     if uploaded_files:
-        import base64, os as _os
-        sandbox_dir = "/tmp/user-code"
-        _os.makedirs(sandbox_dir, exist_ok=True)
-        file_paths = []
+        file_blocks = []
         for f in uploaded_files:
             fname = f.get("name", "uploaded_file")
             fcontent = f.get("content", "")
-            fpath = _os.path.join(sandbox_dir, fname)
-            try:
-                raw = base64.b64decode(fcontent)
-                with open(fpath, "wb") as fh:
-                    fh.write(raw)
-                file_paths.append(fpath)
-                logger.log(f"[file] saved {fname} ({len(raw)} bytes)")
-            except Exception as e:
-                logger.error(f"[file] failed to save {fname}: {e}")
+            fmime = f.get("mimeType", "text/csv")
+            fsize = len(fcontent) * 3 // 4
+            truncated = len(fcontent) > 130000
+            display = fcontent[:130000] if truncated else fcontent
+            note = f"\n(truncated to ~100KB; original ~{fsize} bytes)" if truncated else ""
+            file_blocks.append(
+                f"### {fname} (~{fsize} bytes, {fmime}){note}\n"
+                f"```base64\n{display}\n```"
+            )
+        file_section = (
+            "## Uploaded Files (base64-encoded)\n"
+            "Decode in code_interpreter:\n"
+            "```python\nimport base64, io, csv\n"
+            "data = base64.b64decode('<content>')\n"
+            "reader = csv.DictReader(io.StringIO(data.decode()))\n"
+            "rows = list(reader)\n```\n\n"
+        ) + "\n".join(file_blocks)
 
-        if file_paths:
-            file_list = '\n'.join(f'  - {p}' for p in file_paths)
-            sizes = f" ({sum(1 for _ in file_paths)} files)"
-            if not user_message.strip():
-                user_message = f"Files uploaded to{sizes}:\n{file_list}\n\nRead these files with code_interpreter (Python open()) and analyze them."
-            else:
-                user_message = f"Files uploaded to{sizes}:\n{file_list}\n\nUser request: {user_message}"
+        if not user_message.strip():
+            user_message = file_section + "\nDecode and analyze these files."
+        else:
+            user_message = file_section + f"\n## Request\n{user_message}"
+
+        logger.log(f"[file] embedded {len(uploaded_files)} file(s), total {sum(len(f.get('content','')) for f in uploaded_files)} b64 chars")
 
     if not user_message.strip():
         yield sse_event("error", {"message": "'message' or 'files' is required"})
