@@ -4,17 +4,6 @@ import type { Message, ImageAttachment } from '../types';
 import { useT } from '../i18n';
 import styles from './ChatBubble.module.css';
 
-/** Extract ```html blocks from content. Returns array of HTML strings. */
-function extractHtmlBlocks(content: string): string[] {
-  const blocks: string[] = [];
-  const regex = /```html\s*\n([\s\S]*?)```/g;
-  let match;
-  while ((match = regex.exec(content)) !== null) {
-    blocks.push(match[1]);
-  }
-  return blocks;
-}
-
 interface Props {
   message: Message;
 }
@@ -104,17 +93,6 @@ export default function ChatBubble({ message }: Props) {
   const content = isUser ? message.content : normalizeMarkdown(message.content);
   const hasImages = message.images && message.images.length > 0;
   const activity = message.activity;
-  // Extract HTML blocks for dashboard preview (only for assistant, non-streaming)
-  const htmlBlocks = (!isUser && !message.streaming) ? extractHtmlBlocks(message.content) : [];
-
-  const openHtmlPreview = (html: string, idx: number) => {
-    const w = window.open('', `dashboard-${idx}`, 'width=1200,height=800');
-    if (w) {
-      w.document.write(html);
-      w.document.close();
-    }
-  };
-
   // Don't render empty assistant messages (unless they have images)
   if (!isUser && !message.content && !hasImages && !activity) return null;
 
@@ -167,22 +145,43 @@ export default function ChatBubble({ message }: Props) {
             <>
               {message.content && (
                 <div className={`${styles.markdown} ${message.streaming ? styles.markdownStreaming : ''}`}>
-                  <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
-                </div>
-              )}
-              {/* HTML Dashboard Preview Buttons */}
-              {htmlBlocks.length > 0 && (
-                <div className={styles.dashboardButtons}>
-                  {htmlBlocks.map((html, idx) => (
-                    <div key={idx} className={styles.dashboardRow}>
-                      <button
-                        className={styles.dashboardBtn}
-                        onClick={() => openHtmlPreview(html, idx)}
-                      >
-                        📊 Preview Dashboard {htmlBlocks.length > 1 ? `#${idx + 1}` : ''}
-                      </button>
-                    </div>
-                  ))}
+                  <Markdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      code({ node, className, children, ...props }) {
+                        const match = /language-(\w+)/.exec(className || '');
+                        const lang = match ? match[1] : '';
+                        const codeStr = String(children).replace(/\n$/, '');
+                        // Collapse HTML code blocks — show preview button instead
+                        if (lang === 'html' && !message.streaming) {
+                          return (
+                            <div className={styles.htmlBlockCollapsed}>
+                              <div className={styles.htmlBlockBar}>
+                                📊 HTML Dashboard
+                                <button
+                                  className={styles.htmlBlockBtn}
+                                  onClick={() => {
+                                    const w = window.open('', 'dashboard', 'width=1200,height=800');
+                                    if (w) { w.document.write(codeStr); w.document.close(); }
+                                  }}
+                                >
+                                  Open Preview
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+                        // Normal code block
+                        return (
+                          <pre className={styles.codeBlock}>
+                            <code className={className} {...props}>{children}</code>
+                          </pre>
+                        );
+                      },
+                    }}
+                  >
+                    {content}
+                  </Markdown>
                 </div>
               )}
               {hasImages && (

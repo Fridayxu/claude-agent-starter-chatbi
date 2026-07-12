@@ -404,18 +404,30 @@ function AppInner() {
     initDoneRef.current = true;
     setRightPanelMode('debug');
 
-    let displayText = text;
+    const newMsgs: Message[] = [];
+
+    // File cards: separate from text
     if (files.length) {
-      const names = files.map(f => `📄 ${f.name}`).join(', ');
-      displayText = text ? `${names}\n${text}` : names;
+      files.forEach(f => {
+        const ext = (f.name || '').split('.').pop()?.toUpperCase() || 'FILE';
+        newMsgs.push({
+          id: crypto.randomUUID(),
+          role: 'user',
+          content: `📄 **${f.name}**  \`${ext}\``,
+          timestamp: Date.now(),
+        });
+      });
     }
 
-    const userMsg: Message = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: displayText,
-      timestamp: Date.now(),
-    };
+    // Text message: only if there's text
+    if (text.trim()) {
+      newMsgs.push({
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: text,
+        timestamp: Date.now(),
+      });
+    }
 
     const botMsgId = crypto.randomUUID();
     botMsgIdRef.current = botMsgId;
@@ -427,7 +439,7 @@ function AppInner() {
       streaming: true,
     };
 
-    setMessages(prev => [...prev, userMsg, botMsg]);
+    setMessages(prev => [...prev, ...newMsgs, botMsg]);
     setLoading(true);
 
     /**
@@ -606,7 +618,7 @@ function AppInner() {
         updateBotMessage(content => content || t("status.error"));
         finishStream();
       },
-    }, conversationIdRef.current, { userMsgId: userMsg.id, botMsgId }, eoUuidRef.current, files.length > 0 ? files : undefined);
+    }, conversationIdRef.current, { userMsgId: newMsgs[newMsgs.length - 1]?.id || '', botMsgId }, eoUuidRef.current, files.length > 0 ? files : undefined);
 
     abortCtrlRef.current = ctrl;
   }, [updateBotMessage, setBotActivity, finishBotActivity, clearBotStreaming, handleImageEvent, finishStream, refreshConversations, t]);
