@@ -33,8 +33,8 @@
   max-width: 68%;
   padding: 12px 16px 24px;
   border-radius: var(--radius-md);
-  font-size: .82rem;
-  line-height: 1.65;
+  font-size: .78rem;
+  line-height: 1.6;
   word-break: break-word;
 }
 
@@ -422,3 +422,17 @@
   transform: translateY(-1px);
 }
 .codeBlock { margin: .6em 0; }
+
+/* Tool call activity indicator — compact text */
+.toolActivity {
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 8px; font-size: .65rem;
+  color: var(--text-muted); font-style: italic;
+}
+.toolActivityDot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent-gold);
+  animation: pulseText 1.2s ease-in-out infinite;
+}
+.toolActivityLabel { opacity: .85; }
+@keyframes pulseText { 0%,100%{opacity:1} 50%{opacity:.4} }

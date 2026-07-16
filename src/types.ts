@@ -22,7 +22,7 @@ export interface Message {
   timestamp: number;
   images?: (ImageAttachment | string)[];
   activity?: {
-    type: 'web_search';
+    type: 'web_search' | 'tool';
     label: string;
     status: 'active' | 'done' | 'error';
     /**

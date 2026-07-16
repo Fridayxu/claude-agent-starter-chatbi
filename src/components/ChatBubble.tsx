@@ -100,6 +100,12 @@ export default function ChatBubble({ message }: Props) {
     <div className={`${styles.row} ${isUser ? styles.userRow : styles.botRow}`}>
       {!isUser && <div className={styles.avatar}>⬡</div>}
       <div className={`${styles.bubble} ${isUser ? styles.userBubble : styles.botBubble}`}>
+        {!isUser && activity?.type === 'tool' && (
+          <div className={styles.toolActivity} role="status" aria-live="polite">
+            <span className={styles.toolActivityDot} />
+            <span className={styles.toolActivityLabel}>{activity.label}</span>
+          </div>
+        )}
         {!isUser && activity?.type === 'web_search' && (
           <div
             className={`${styles.webSearchActivity} ${

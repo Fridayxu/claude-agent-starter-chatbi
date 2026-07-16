@@ -496,9 +496,14 @@ function AppInner() {
       },
 
       onToolCalled(toolName) {
-        if (toolName === 'web_search' || toolName === 'browser') {
-          setBotActivity({ type: 'web_search', label: 'Web searching...', status: 'active' });
-        }
+        // Show activity indicator for all tool calls
+        const toolLabels: Record<string,string> = {
+          code_interpreter:'Python', commands:'Shell', files_list:'Listing files',
+          files_read:'Reading file', files_write:'Writing file',
+          browser:'Browser', web_search:'Searching',
+        };
+        const label = toolLabels[toolName] || toolName;
+        setBotActivity({ type: 'tool', label: 'calling '+label+'...', status: 'active' });
 
         const lampId = toolToLampId(toolName);
         if (!lampId) return;
