@@ -340,11 +340,32 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
         resume=sdk_resume,
     )
 
+    # ── In-session memory: prepend conversation history ──
+    # Claude SDK session resume is unreliable with @makers/ models,
+    # so we manually fetch history and include it in the prompt.
+    history_prefix = ""
+    if cid and store_adapter:
+        try:
+            history_msgs = await store_adapter.get_messages(conversation_id=cid, limit=20, order="asc")
+            if history_msgs and len(history_msgs) > 1:  # >1 because current user msg is already in there
+                lines = ["## Conversation History (for context)\n"]
+                for m in history_msgs[:-1]:  # exclude the just-saved current message
+                    role = getattr(m, "role", "user")
+                    content = getattr(m, "content", "")
+                    if content and len(str(content)) < 2000:
+                        lines.append(f"{role}: {content}")
+                history_prefix = "\n".join(lines) + "\n\n---\n\n"
+                logger.log(f"[memory] prepended {len(lines)-1} history messages ({len(history_prefix)} chars)")
+        except Exception as e:
+            logger.error(f"[memory] failed to fetch history: {e}")
+
+    prompt_text = history_prefix + user_message if history_prefix else user_message
+
     stopped = False
     stream_state = StreamState(bot_msg_id=bot_msg_id)
 
     try:
-        response_iter = query(prompt=user_message, options=options).__aiter__()
+        response_iter = query(prompt=prompt_text, options=options).__aiter__()
         async for item_type, msg in iter_query_messages(response_iter, cancel_signal, HEARTBEAT_INTERVAL_S):
             if item_type == "cancelled":
                 logger.log(f"[cancel] cancel_signal observed, stopping stream cid={cid!r}")
