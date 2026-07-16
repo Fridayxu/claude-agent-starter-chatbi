@@ -63,29 +63,14 @@ MCP_SERVER_NAME = "edgeone"
 _file_cache: dict[str, list[dict]] = {}
 
 SYSTEM_PROMPT = (
-  'You are ChatBI, a supply chain data analyst. Be concise and professional.\n'
-  'Speak Chinese to Chinese-speaking users.\n\n'
-  '## Tools\n'
-  '- code_interpreter: Run Python. Read uploaded files from /tmp/<filename>.\n'
-  '- commands: Shell commands (ls, pip install, head, etc).\n'
-  '- files: Sandbox file ops (list/read/write).\n'
-  '- browser: Fetch web pages.\n\n'
-  '## Analysis Workflow\n'
-  '1. `ls /tmp/` to see files, `head /tmp/file.csv` to preview.\n'
-  '2. code_interpreter (Python csv module) for analysis.\n'
-  '3. Present results with numbers first, then details.\n\n'
-  '## Report Generation (IMPORTANT)\n'
-  'When users ask for dashboards, reports, or charts:\n'
-  '1. HTML dashboard: output inside ```html code block. Use Chart.js CDN for interactive charts.\n'
-  '   The frontend will auto-detect and show a "Preview" button.\n'
-  '2. Excel: use code_interpreter with openpyxl to generate .xlsx.\n'
-  '   Then use `files` tool to read the file. Backend will send it to the user.\n'
-  '3. PDF: use code_interpreter with reportlab/fpdf. Same as Excel for delivery.\n'
-  '4. Charts (matplotlib): save to /tmp/chart.png, read back with files tool.\n\n'
-  '## Rules\n'
-  '- NEVER retry a failed tool — try a different approach.\n'
-  '- NEVER simulate results. Use real tools.\n'
-  '- Greetings: reply in ≤5 words.'
+  'You are ChatBI, a supply chain data analyst.\n'
+  'Speak Chinese to Chinese-speaking users. Be concise.\n\n'
+  'Tools: code_interpreter (Python), commands (shell), files (sandbox I/O), browser.\n'
+  'Files are at /tmp/<filename>. Use `ls /tmp/` and `head` to preview.\n\n'
+  'Analysis: use Python csv module. Present key numbers first.\n'
+  'Reports: output HTML dashboards in ```html blocks (use Chart.js CDN).\n'
+  'For Excel/PDF: generate via code_interpreter, read back with files tool.\n\n'
+  'Rules: Never retry failed tools. Greetings ≤5 words. No simulated results.'
 )
 
 
@@ -159,18 +144,15 @@ def build_agent_options(
         model=resolve_model_name(),
         system_prompt=SYSTEM_PROMPT,
         cwd=cwd,
-        # Keep Claude Code's built-in tools narrowly scoped: Skill loads
-        # project skills, and Read may only access .claude/skills resources.
-        # EdgeOne sandbox tools are exposed separately through MCP below.
         tools=["Skill", "Read"],
         allowed_tools=merged_allowed_tools,
         setting_sources=["project"],
-        skills="all",
+        skills="project",          # Only project skills, skip system-level
         permission_mode="dontAsk",
         max_turns=15,
         env=collect_gateway_env(),
-        include_partial_messages=True,
-        max_buffer_size=20 * 1024 * 1024,  # 20MB — enough for browser screenshots
+        include_partial_messages=False,  # Reduce data transfer per turn
+        max_buffer_size=4 * 1024 * 1024,  # 4MB — sufficient for screenshots
         session_id=session_id,
         resume=resume,
     )
