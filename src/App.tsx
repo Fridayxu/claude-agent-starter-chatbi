@@ -404,6 +404,10 @@ function AppInner() {
     initDoneRef.current = true;
     setRightPanelMode('debug');
 
+    // Reset tool/skill indicators for new conversation turn
+    setLamps(prev => prev.map(l => ({ ...l, active: false })));
+    setSkillInUse(null);
+
     const newMsgs: Message[] = [];
 
     // File cards: separate from text
@@ -506,11 +510,7 @@ function AppInner() {
               : l
           )
         );
-        setTimeout(() => {
-          setLamps(prev =>
-            prev.map(l => (l.id === lampId ? { ...l, active: false } : l))
-          );
-        }, 1000);
+        // Lamp stays lit — cleared on next user message
       },
 
       onImage(payload) {
@@ -598,7 +598,7 @@ function AppInner() {
             (event.data as { name?: unknown } | null)?.name;
           if (typeof name === 'string' && name.length > 0) {
             setSkillInUse(name);
-            setTimeout(() => setSkillInUse(null), 2000);
+            // Skill indicator persists — cleared on next user message
           }
         }
       },
