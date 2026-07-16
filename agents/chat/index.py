@@ -151,7 +151,7 @@ def build_agent_options(
         permission_mode="dontAsk",
         max_turns=15,
         env=collect_gateway_env(),
-        include_partial_messages=False,  # Reduce data transfer per turn
+        include_partial_messages=True,   # Required for text_delta streaming
         max_buffer_size=4 * 1024 * 1024,  # 4MB — sufficient for screenshots
         session_id=session_id,
         resume=resume,
