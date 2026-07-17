@@ -1,24 +1,23 @@
 /* ═══════════════════════════════════════════════
-   App Shell — clean two-panel layout
-   Sidebar + Chat (full width, no right panel)
+   App Shell — clean 3-panel: sidebar + chat + slim activity
+   All panels share bg-app for smooth transition
    ═══════════════════════════════════════════════ */
 
 .shell {
-  position: relative; height: 100vh; width: 100vw;
-  display: flex; align-items: center; justify-content: center;
-  overflow: hidden; background: var(--bg-app);
+  position:relative; height:100vh; width:100vw;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden; background:var(--bg-app);
 }
 
-/* ambient blobs */
-.blob1 { position:absolute; top:-160px; left:-160px; width:560px; height:560px; border-radius:50%; background:radial-gradient(circle, rgba(37,99,235,.05) 0%, transparent 70%); filter:blur(60px); pointer-events:none; animation:blobFloat 14s ease-in-out infinite alternate; }
-.blob2 { position:absolute; bottom:-120px; right:-120px; width:460px; height:460px; border-radius:50%; background:radial-gradient(circle, rgba(59,130,246,.03) 0%, transparent 70%); filter:blur(80px); pointer-events:none; animation:blobFloat 18s ease-in-out infinite alternate-reverse; }
-@keyframes blobFloat { 0%{transform:translate(0,0) scale(1)} 100%{transform:translate(40px,30px) scale(1.08)} }
+/* ambient blobs — subtle */
+.blob1 { position:absolute; top:-160px; left:-160px; width:560px; height:560px; border-radius:50%; background:radial-gradient(circle, rgba(37,99,235,.04) 0%, transparent 70%); filter:blur(60px); pointer-events:none; }
+.blob2 { position:absolute; bottom:-120px; right:-120px; width:460px; height:460px; border-radius:50%; background:radial-gradient(circle, rgba(59,130,246,.03) 0%, transparent 70%); filter:blur(80px); pointer-events:none; }
 
-/* ── Stage: sidebar + chat ── */
+/* ── Stage ── */
 .stage {
   position:relative; z-index:1; display:flex;
-  width:100vw; height:100vh;
-  overflow:hidden; background:var(--bg-app);
+  width:100vw; height:100vh; overflow:hidden;
+  background:var(--bg-app);
 }
 
 /* ── Chat panel ── */
@@ -30,50 +29,60 @@
 
 /* History loading */
 .historyOverlay { position:absolute; inset:0; z-index:10; display:flex; align-items:center; justify-content:center; background:var(--bg-app); }
-.historySpinner { width:32px; height:32px; border:3px solid var(--border-color); border-top-color:var(--color-primary); border-radius:50%; animation:historySpin .8s linear infinite; }
+.historySpinner { width:28px; height:28px; border:3px solid var(--border-color); border-top-color:var(--color-primary); border-radius:50%; animation:historySpin .8s linear infinite; }
 @keyframes historySpin { to{transform:rotate(360deg)} }
+
+/* ── Right: slim activity panel ── */
+.activityPanel {
+  flex:0 0 240px;
+  display:flex; flex-direction:column;
+  background:var(--bg-app);
+  border-left:1px solid var(--border-color);
+  min-width:0; overflow-y:auto;
+}
+.activityHeader {
+  padding:12px 16px; border-bottom:1px solid var(--border-color);
+  font-size:.7rem; font-weight:600; color:var(--text-secondary);
+  text-transform:uppercase; letter-spacing:.05em; flex-shrink:0;
+}
+.activityList {
+  flex:1; padding:8px; overflow-y:auto;
+  display:flex; flex-direction:column; gap:4px;
+}
+.activityItem {
+  display:flex; align-items:flex-start; gap:6px;
+  padding:5px 8px; border-radius:var(--radius-sm);
+  font-size:.65rem; color:var(--text-secondary);
+  font-family:var(--font-code);
+}
+.activityItem:hover { background:var(--bg-hover); }
+.activityDot {
+  width:5px; height:5px; border-radius:50%; flex-shrink:0; margin-top:4px;
+}
+.activityDot.tool { background:var(--color-primary); }
+.activityDot.skill { background:var(--green-500); }
+.activityDot.think { background:var(--blue-400); animation:pulseDot 1s ease-in-out infinite; }
+.activityDot.error { background:var(--color-error); }
+.activityDot.done { background:var(--green-500); }
+@keyframes pulseDot { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* Download button in activity panel */
+.downloadBtn {
+  display:flex; align-items:center; gap:4px; width:100%;
+  padding:6px 8px; border-radius:var(--radius-sm); border:1px solid var(--color-primary);
+  background:var(--color-primary-dim); color:var(--color-primary);
+  font-size:.62rem; cursor:pointer; font-family:var(--font-code);
+  transition:background var(--ease-out); text-align:left;
+}
+.downloadBtn:hover { background:rgba(37,99,235,.15); }
 
 /* ── Header ── */
 .header {
-  display:flex; align-items:center; gap:12px;
-  padding:10px 20px; border-bottom:1px solid var(--border-color);
-  background:var(--bg-surface); flex-shrink:0;
+  display:flex; align-items:center; gap:10px;
+  padding:8px 20px; border-bottom:1px solid var(--border-color);
+  background:var(--bg-app); flex-shrink:0;
 }
-.headerLeft { display:flex; align-items:center; gap:10px; }
-.logo { font-size:1.5rem; color:var(--color-primary); line-height:1; flex-shrink:0; }
-.title { font-family:var(--font-sans); font-size:.9rem; font-weight:700; color:var(--text-primary); }
-.subtitle { font-size:.6rem; color:var(--text-muted); margin-top:1px; }
-
-/* ── Compact status bar ── */
-.statusBar {
-  display:flex; align-items:center; gap:12px;
-  padding:4px 20px; border-bottom:1px solid var(--border-color);
-  background:var(--bg-surface); flex-shrink:0;
-  font-size:.65rem; color:var(--text-muted);
-  min-height:26px; flex-wrap:wrap;
-}
-.statusItem { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
-.statusDot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
-.statusDot.thinking { background:var(--blue-400); animation:pulseDot 1s ease-in-out infinite; }
-.statusDot.tool { background:var(--color-primary); }
-.statusDot.skill { background:var(--green-500); }
-@keyframes pulseDot { 0%,100%{opacity:1} 50%{opacity:.3} }
-
-/* Skills loading */
-.skillsLoading {
-  font-size:.65rem; font-family:var(--font-code);
-  color:var(--green-500); letter-spacing:.02em;
-}
-
-/* Bold tag for model name */
-.modelTag { font-family:var(--font-code); font-size:.6rem; color:var(--text-muted); background:var(--bg-elevated); padding:1px 6px; border-radius:4px; }
-
-/* File download button */
-.downloadBtn {
-  display:inline-flex; align-items:center; gap:4px;
-  padding:4px 10px; border-radius:var(--radius-sm);
-  border:1px solid var(--color-primary); background:var(--color-primary-dim);
-  color:var(--color-primary); font-size:.65rem; cursor:pointer;
-  font-family:var(--font-code); transition:background var(--ease-out);
-}
-.downloadBtn:hover { background:rgba(37,99,235,.15); }
+.headerLeft { display:flex; align-items:center; gap:8px; }
+.logo { font-size:1.4rem; color:var(--color-primary); line-height:1; flex-shrink:0; }
+.title { font-family:var(--font-sans); font-size:.85rem; font-weight:700; color:var(--text-primary); }
+.skillsLoading { font-size:.62rem; font-family:var(--font-code); color:var(--green-500); }

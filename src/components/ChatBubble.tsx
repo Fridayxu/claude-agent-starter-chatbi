@@ -1,3 +1,12 @@
+/** Extract [FILE: name|base64content] blocks and return download buttons */
+function extractFileBlocks(content: string): Array<{name:string, b64:string}> {
+  const re = /\[FILE:\s*([^|]+)\|([^\]]+)\]/g;
+  const result: Array<{name:string, b64:string}> = [];
+  let m;
+  while ((m = re.exec(content)) !== null) result.push({name: m[1].trim(), b64: m[2].trim()});
+  return result;
+}
+
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Message, ImageAttachment } from '../types';
@@ -93,6 +102,16 @@ export default function ChatBubble({ message }: Props) {
   const content = isUser ? message.content : normalizeMarkdown(message.content);
   const hasImages = message.images && message.images.length > 0;
   const activity = message.activity;
+  const fileBlocks = (!isUser && !message.streaming) ? extractFileBlocks(message.content) : [];
+
+  const downloadFile = (name: string, b64: string) => {
+    const mime = name.endsWith('.xlsx') ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' :
+                 name.endsWith('.pdf') ? 'application/pdf' :
+                 name.endsWith('.png') ? 'image/png' : 'application/octet-stream';
+    const url = `data:${mime};base64,${b64}`;
+    const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+  };
+
   // Don't render empty assistant messages (unless they have images)
   if (!isUser && !message.content && !hasImages && !activity) return null;
 
@@ -188,6 +207,25 @@ export default function ChatBubble({ message }: Props) {
                   >
                     {content}
                   </Markdown>
+                </div>
+              )}
+              {fileBlocks.length > 0 && (
+                <div style={{marginTop:'10px',display:'flex',flexWrap:'wrap',gap:'6px'}}>
+                  {fileBlocks.map((fb, i) => (
+                    <button key={i}
+                      onClick={() => downloadFile(fb.name, fb.b64)}
+                      style={{
+                        display:'inline-flex',alignItems:'center',gap:'4px',
+                        padding:'5px 10px',borderRadius:'6px',
+                        border:'1px solid var(--color-primary)',
+                        background:'var(--color-primary-dim)',
+                        color:'var(--color-primary)',
+                        fontSize:'.68rem',cursor:'pointer',
+                        fontFamily:'var(--font-code)'
+                      }}>
+                      📥 {fb.name}
+                    </button>
+                  ))}
                 </div>
               )}
               {hasImages && (

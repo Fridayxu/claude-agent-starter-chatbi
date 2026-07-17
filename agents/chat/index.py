@@ -82,7 +82,8 @@ SYSTEM_PROMPT = (
   '## Analysis\n'
   'Use Python csv module. Present key numbers first.\n'
   'HTML dashboards: ```html blocks with Chart.js CDN.\n'
-  'Excel/PDF: generate via code_interpreter.\n\n'
+  'Excel/PDF: generate via code_interpreter, read with files tool,\n'
+  'then output [FILE: name.xlsx|base64content] for download.\n\n'
   'Rules: Never retry failed tools. Greetings ≤5 words.'
 )
 

@@ -795,27 +795,6 @@ function AppInner() {
             {skillInUse && <span className={styles.skillsLoading}>● {skillInUse}</span>}
           </header>
 
-          {/* Compact status bar: thinking / tools / skills */}
-          <div className={styles.statusBar}>
-            {statusText && (
-              <span className={styles.statusItem}>
-                <span className={`${styles.statusDot} ${statusText.includes('thinking') ? styles.thinking : styles.tool}`} />
-                {statusText}
-              </span>
-            )}
-            {lamps.filter(l=>l.active).map(l=>(
-              <span key={l.id} className={styles.statusItem}>
-                <span className={`${styles.statusDot} ${styles.tool}`} />
-                {l.label}
-              </span>
-            ))}
-            {downloads.length > 0 && downloads.map((d,i)=>(
-              <button key={i} className={styles.downloadBtn} onClick={d.onClick}>
-                📥 {d.name}
-              </button>
-            ))}
-          </div>
-
           <div className={styles.chatWindowShell}>
             <ChatWindow messages={messages} loading={loading} />
             {historyLoading && messages.length === 0 && (
@@ -825,6 +804,36 @@ function AppInner() {
             )}
           </div>
           <ChatInput onSend={handleSend} onStop={handleStop} onClear={handleClearHistory} disabled={loading} />
+        </div>
+
+        {/* Slim activity panel — tools/skills/thinking flow only */}
+        <div className={styles.activityPanel}>
+          <div className={styles.activityHeader}>Activity</div>
+          <div className={styles.activityList}>
+            {statusText && (
+              <div className={styles.activityItem}>
+                <span className={`${styles.activityDot} ${styles.think}`} />
+                {statusText}
+              </div>
+            )}
+            {lamps.filter(l=>l.active).map(l=>(
+              <div key={l.id} className={styles.activityItem}>
+                <span className={`${styles.activityDot} ${styles.tool}`} />
+                {l.icon} {l.label}
+              </div>
+            ))}
+            {skillInUse && (
+              <div className={styles.activityItem}>
+                <span className={`${styles.activityDot} ${styles.skill}`} />
+                Skill: {skillInUse}
+              </div>
+            )}
+            {downloads.map((d,i)=>(
+              <button key={i} className={styles.downloadBtn} onClick={d.onClick}>
+                📥 {d.name}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <GitHubLink />
