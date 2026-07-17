@@ -28,8 +28,6 @@ import { saveSnapshot, loadSnapshot, deleteSnapshot } from './lib/chatUiStore';
 import ToolIndicators from './components/ToolIndicators';
 import ChatWindow from './components/ChatWindow';
 import ChatInput from './components/ChatInput';
-import CodeViewer from './components/CodeViewer';
-import DebugPanel from './components/DebugPanel';
 import ConversationSidebar from './components/ConversationSidebar';
 import GitHubLink from './components/GitHubLink';
 import DeployLink from './components/DeployLink';
@@ -132,7 +130,8 @@ function AppInner() {
   // when the SDK ACTUALLY loads a skill for this turn), auto-cleared
   // after a short interval so the pill animates out.
   const [skillInUse, setSkillInUse] = useState<string | null>(null);
-  const [rightPanelMode, setRightPanelMode] = useState<'code' | 'debug'>('code');
+  const [statusText, setStatusText] = useState('');
+  const [downloads, setDownloads] = useState<Array<{name:string,onClick:()=>void}>>([]);
 
   // Conversation list state (left sidebar)
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -153,8 +152,6 @@ function AppInner() {
       label: t(LAMP_I18N_KEYS[l.id] as MessageKeys),
     })));
   }, [t]);
-
-  const [debugEvents, setDebugEvents] = useState<RawSseEvent[]>([]);
 
   const botMsgIdRef = useRef<string>('');
   const abortCtrlRef = useRef<AbortController | null>(null);
@@ -194,7 +191,7 @@ function AppInner() {
   const loadConversation = useCallback(async (convId: string) => {
     setHistoryLoading(true);
     setMessages([]);
-    setDebugEvents([]);
+    // debug cleared;
     initDoneRef.current = false;
 
     revokeAllObjectUrls();
@@ -404,11 +401,12 @@ function AppInner() {
 
   const handleSend = useCallback(async (text: string, files: Array<{name:string,content:string,mimeType:string}>) => {
     initDoneRef.current = true;
-    setRightPanelMode('debug');
+    setStatusText('Thinking...');
 
     // Reset tool/skill indicators for new conversation turn
     setLamps(prev => prev.map(l => ({ ...l, active: false })));
     setSkillInUse(null);
+    setDownloads([]);
 
     const newMsgs: Message[] = [];
 
@@ -574,26 +572,10 @@ function AppInner() {
         // so a multi-paragraph response doesn't flood the debug panel with
         // hundreds of one-token rows.
         if (event.eventType === 'text_delta') {
-          const delta = (event.data as { delta?: string } | null)?.delta ?? '';
-          setRightPanelMode('debug');
-          setDebugEvents(prev => {
-            const last = prev[prev.length - 1];
-            if (last && last.eventType === 'text_delta') {
-              const prevDelta = (last.data as { delta?: string } | null)?.delta ?? '';
-              const merged: RawSseEvent = {
-                ...last,
-                data: { delta: prevDelta + delta },
-                raw: last.raw + delta,
-                timestamp: event.timestamp,
-              };
-              return [...prev.slice(0, -1), merged];
-            }
-            return [...prev, event];
-          });
-          return;
+          setStatusText('');
         }
-        setRightPanelMode('debug');
-        setDebugEvents(prev => [...prev, event]);
+        setStatusText('Thinking...');
+        // debug events removed
         // Only react to `skill_loaded` (singular). The plural
         // `skills_available` / `skills_loaded` events fire on every
         // request as catalog/config announcements regardless of whether
@@ -677,8 +659,8 @@ function AppInner() {
     conversationIdRef.current = newId;
     setActiveConversationId(newId);
     setMessages([]);
-    setDebugEvents([]);
-    setRightPanelMode('code');
+    // debug cleared;
+    setStatusText('');
     initDoneRef.current = false;
   }, [refreshConversations]);
 
@@ -711,7 +693,7 @@ function AppInner() {
     localStorage.setItem(CONVERSATION_ID_STORAGE_KEY, id);
     conversationIdRef.current = id;
     setActiveConversationId(id);
-    setRightPanelMode('code');
+    setStatusText('');
     void loadConversation(id);
   }, [loading, loadConversation]);
 
@@ -726,8 +708,8 @@ function AppInner() {
     conversationIdRef.current = newId;
     setActiveConversationId(newId);
     setMessages([]);
-    setDebugEvents([]);
-    setRightPanelMode('code');
+    // debug cleared;
+    setStatusText('');
     initDoneRef.current = false;
     setHistoryLoading(false);
   }, [loading]);
@@ -766,8 +748,8 @@ function AppInner() {
       conversationIdRef.current = newId;
       setActiveConversationId(newId);
       setMessages([]);
-      setDebugEvents([]);
-      setRightPanelMode('code');
+      // debug cleared;
+      setStatusText('');
       initDoneRef.current = false;
       setHistoryLoading(false);
     }
@@ -807,14 +789,32 @@ function AppInner() {
           <header className={styles.header}>
             <div className={styles.headerLeft}>
               <span className={styles.logo}>⬡</span>
-              <div>
-                <p className={styles.title}>{t("app.title")}</p>
-                <p className={styles.subtitle}>{t("app.subtitle")}</p>
-              </div>
+              <span className={styles.title}>{t("app.title")}</span>
             </div>
             <ToolIndicators lamps={lamps} />
-            {skillInUse && <span className={styles.skillsLoading}>using {skillInUse}</span>}
+            {skillInUse && <span className={styles.skillsLoading}>● {skillInUse}</span>}
           </header>
+
+          {/* Compact status bar: thinking / tools / skills */}
+          <div className={styles.statusBar}>
+            {statusText && (
+              <span className={styles.statusItem}>
+                <span className={`${styles.statusDot} ${statusText.includes('thinking') ? styles.thinking : styles.tool}`} />
+                {statusText}
+              </span>
+            )}
+            {lamps.filter(l=>l.active).map(l=>(
+              <span key={l.id} className={styles.statusItem}>
+                <span className={`${styles.statusDot} ${styles.tool}`} />
+                {l.label}
+              </span>
+            ))}
+            {downloads.length > 0 && downloads.map((d,i)=>(
+              <button key={i} className={styles.downloadBtn} onClick={d.onClick}>
+                📥 {d.name}
+              </button>
+            ))}
+          </div>
 
           <div className={styles.chatWindowShell}>
             <ChatWindow messages={messages} loading={loading} />
@@ -825,14 +825,6 @@ function AppInner() {
             )}
           </div>
           <ChatInput onSend={handleSend} onStop={handleStop} onClear={handleClearHistory} disabled={loading} />
-        </div>
-
-        <div className={styles.codePanel}>
-          {rightPanelMode === 'code' ? (
-            <CodeViewer />
-          ) : (
-            <DebugPanel events={debugEvents} onClear={() => setDebugEvents([])} />
-          )}
         </div>
       </div>
       <GitHubLink />
