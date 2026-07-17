@@ -82,8 +82,7 @@ SYSTEM_PROMPT = (
   '## Analysis\n'
   'Use Python csv module. Present key numbers first.\n'
   'HTML dashboards: ```html blocks with Chart.js CDN.\n'
-  'Excel/PDF: generate via code_interpreter, read with files tool,\n'
-  'then output [FILE: name.xlsx|base64content] for download.\n\n'
+  'Excel/PDF: generate via code_interpreter, save to /tmp/. Files auto-detected for download.\n\n'
   'Rules: Never retry failed tools. Greetings ≤5 words.'
 )
 
@@ -514,7 +513,6 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
 
     if store_adapter and cid and assistant_content:
         try:
-            # append_message accepts only: conversation_id, role, content, metadata, user_id.
             await store_adapter.append_message(
                 conversation_id=cid,
                 role="assistant",
@@ -523,5 +521,19 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
             )
         except Exception as e:
             logger.error(f"[store] failed to save assistant response: {e}")
+
+    # ── Auto-detect generated files and emit download events ──
+    import glob as _glob
+    for _pattern in ("/tmp/*.xlsx", "/tmp/*.pdf", "/tmp/*.png"):
+        for _fp in _glob.glob(_pattern):
+            try:
+                _fname = os.path.basename(_fp)
+                with open(_fp, "rb") as _fh:
+                    _b64 = base64.b64encode(_fh.read()).decode()
+                yield sse_event("file_generated", {"name": _fname, "base64": _b64, "mime": _fp.rsplit(".",1)[-1]})
+                os.remove(_fp)  # Clean up
+                logger.log(f"[file_gen] emitted {_fname} ({len(_b64)} b64 chars)")
+            except Exception as _e:
+                logger.error(f"[file_gen] failed {_fp}: {_e}")
 
     yield sse_event("done", {"stopped": stopped})

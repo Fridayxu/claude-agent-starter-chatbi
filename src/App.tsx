@@ -592,6 +592,14 @@ function AppInner() {
         }
       },
 
+      onFileGenerated({ name, base64: b64, mime }) {
+        const mimeMap: Record<string,string> = { xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pdf:'application/pdf', png:'image/png' };
+        const m = mimeMap[mime] || 'application/octet-stream';
+        setDownloads(prev => [...prev, { name, onClick: () => {
+          const a = document.createElement('a'); a.href = `data:${m};base64,${b64}`; a.download = name; a.click();
+        }}]);
+      },
+
       onDone() {
         finishBotActivity();
         clearBotStreaming();

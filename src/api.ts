@@ -49,6 +49,7 @@ export interface StreamCallbacks {
   onSkillLoaded?: (payload: SkillLoadedPayload) => void;
   onDone: () => void;
   onError: (err: Error) => void;
+  onFileGenerated?: (payload: {name:string, base64:string, mime:string}) => void;
   onRawEvent?: (event: RawSseEvent) => void;
 }
 
@@ -223,6 +224,9 @@ function dispatchSseChunk(part: string, cb: StreamCallbacks, markDone: () => voi
         break;
       case 'error':
         cb.onError(new Error(parsed.message || 'agent returned error'));
+        break;
+      case 'file_generated':
+        cb.onFileGenerated?.({ name: parsed.name, base64: parsed.base64, mime: parsed.mime || 'xlsx' });
         break;
       case 'done':
         markDone();
