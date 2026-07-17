@@ -173,9 +173,9 @@
 
 /* file tags */
 .fileTags { display:flex; flex-wrap:wrap; gap:6px; }
-.fileTag { display:inline-flex; align-items:center; gap:6px; font-size:.68rem; padding:5px 10px; border-radius:999px; background:var(--color-primary-dim); border:1px solid rgba(37,99,235,.15); color:var(--color-primary); }
-.fileTagName { max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.fileTagExt { font-size:.58rem; background:var(--bg-elevated); padding:1px 6px; border-radius:3px; color:var(--text-muted); font-weight:600; letter-spacing:.04em; }
+.fileTag { display:inline-flex; align-items:center; gap:4px; font-size:.72rem; padding:4px 10px; border-radius:999px; background:var(--color-primary-dim); border:1px solid rgba(37,99,235,.15); color:var(--color-primary); font-weight:500; }
+.fileTagName { max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.72rem; }
+.fileTagExt { font-size:.58rem; background:var(--color-primary-dim); padding:1px 5px; border-radius:3px; color:var(--color-primary); font-weight:700; letter-spacing:.04em; opacity:.7; }
 .fileTagRem { background:none; border:none; color:var(--color-primary); cursor:pointer; font-size:.8rem; padding:0; line-height:1; width:16px; height:16px; border-radius:50%; transition:background .15s; display:flex; align-items:center; justify-content:center; }
 .fileTagRem:hover { background:rgba(37,99,235,.15); color:var(--text-primary); }
 

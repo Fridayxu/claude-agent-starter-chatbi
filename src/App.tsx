@@ -417,7 +417,7 @@ function AppInner() {
         newMsgs.push({
           id: crypto.randomUUID(),
           role: 'user',
-          content: `📄 **${f.name}**  \`${ext}\``,
+          content: `📄 **${f.name}**   \`${ext}\``,
           timestamp: Date.now(),
         });
       });
