@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
+import httpx
 import os
 import time
 from typing import Any, AsyncGenerator
@@ -171,6 +173,83 @@ def build_agent_options(
     return opts
 
 
+async def _gateway_direct_stream(
+    ctx: Any, cid: str, user_message: str, history_msgs: list,
+    api_key: str, base_url: str, model: str,
+) -> AsyncGenerator[str, None]:
+    """Gateway Direct path — standard OpenAI-compatible multi-turn chat.
+    Fast (no SDK overhead) with proper message-role memory."""
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    # Add conversation history with proper role tags
+    for m in history_msgs:
+        role = getattr(m, "role", "user")
+        content = getattr(m, "content", "")
+        if content and role in ("user", "assistant"):
+            messages.append({"role": role, "content": str(content)[:4000]})
+
+    # Add current message
+    messages.append({"role": "user", "content": user_message})
+
+    logger.log(f"[gateway] streaming with {len(messages)} messages (history={len(history_msgs)})")
+
+    async with httpx.AsyncClient(timeout=180.0) as client:
+        try:
+            async with client.stream(
+                "POST",
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "stream": True,
+                },
+            ) as response:
+                if response.status_code != 200:
+                    body = await response.aread()
+                    yield sse_event("error", {"message": f"Gateway {response.status_code}: {body.decode()[:300]}"})
+                    yield sse_event("done", {"stopped": False})
+                    return
+
+                assistant_text = ""
+                async for line in response.aiter_lines():
+                    if ctx.request.signal.is_set():
+                        break
+                    if not line.startswith("data: "):
+                        continue
+                    data_str = line[6:]
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            assistant_text += content
+                            yield sse_event("text_delta", {"delta": content})
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+
+                # Save assistant message
+                if cid and assistant_text.strip():
+                    try:
+                        await ctx.store.append_message(conversation_id=cid, role="assistant", content=assistant_text.strip())
+                    except Exception as e:
+                        logger.error(f"[gateway] failed to save: {e}")
+
+        except httpx.ReadError:
+            if not ctx.request.signal.is_set():
+                yield sse_event("error", {"message": "Stream interrupted"})
+        except Exception as e:
+            logger.error(f"[gateway] error: {e}")
+            yield sse_event("error", {"message": str(e)})
+
+    yield sse_event("done", {"stopped": False})
+
+
 async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     """EdgeOne Makers entry point (async generator streaming)."""
     cid = ctx.conversation_id or ""
@@ -258,13 +337,55 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     raw_user_id = body.get("userId") or body.get("user_id") or "" if isinstance(body, dict) else ""
     user_id = str(raw_user_id).strip() or None
 
+    store_adapter = ctx.store
+    cancel_signal = ctx.request.signal
+
+    # Save user message to store (both paths need this)
+    if cid:
+        try:
+            await store_adapter.append_message(
+                conversation_id=cid,
+                role="user",
+                content=user_message,
+                user_id=user_id,
+            )
+        except Exception as e:
+            logger.error(f"[store] failed to save user message: {e}")
+
+    # ═══ Routing: Gateway Direct for chat, SDK for file analysis ═══
+    has_files_in_sandbox = bool(file_paths)
+    if not has_files_in_sandbox and user_message.strip():
+        # Fast path: Gateway Direct — proper multi-turn memory, no SDK overhead
+        env = ctx.env
+        api_key = env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY", "")
+        base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://ai-gateway.edgeone.link/v1")
+        model = resolve_model_name()
+
+        if not api_key:
+            yield sse_event("error", {"message": "Missing AI_GATEWAY_API_KEY"})
+            yield sse_event("done", {"stopped": False})
+            return
+
+        # Fetch history for multi-turn memory
+        history_msgs: list = []
+        if cid and store_adapter:
+            try:
+                history_msgs = await store_adapter.get_messages(conversation_id=cid, limit=30, order="asc")
+                # Exclude the just-saved current message
+                history_msgs = history_msgs[:-1] if history_msgs else []
+            except Exception as e:
+                logger.error(f"[gateway] history fetch failed: {e}")
+
+        logger.log(f"[route] Gateway Direct (no files), history={len(history_msgs)}")
+        async for event in _gateway_direct_stream(ctx, cid, user_message, history_msgs, api_key, base_url, model):
+            yield event
+        return
+
+    # ═══ SDK path: file analysis with sandbox tools ═══
     if not _SDK_AVAILABLE:
         yield sse_event("error", {"message": "claude_agent_sdk is not installed"})
         yield sse_event("done", {"stopped": False})
         return
-
-    cancel_signal = ctx.request.signal
-    store_adapter = ctx.store
 
     # Get Claude session store for transcript persistence (matches TS reference).
     # This gives the SDK multi-turn context, preventing chaotic/repeated tool calls.
@@ -292,18 +413,6 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
         except Exception as e:
             logger.error(f"[debug_store] failed to dump: {e}")
         # === END DEBUG ===
-
-        try:
-            # append_message accepts only: conversation_id, role, content, metadata, user_id.
-            # message_id is not supported (the SDK auto-generates one).
-            await store_adapter.append_message(
-                conversation_id=cid,
-                role="user",
-                content=user_message,
-                user_id=user_id,
-            )
-        except Exception as e:
-            logger.error(f"[store] failed to save user message: {e}")
 
     # Build EdgeOne platform tools → Claude Agent SDK MCP server
     raw_tools = ctx.tools
