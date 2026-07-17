@@ -359,6 +359,8 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
         env = ctx.env
         api_key = env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY", "")
         base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://ai-gateway.edgeone.link/v1")
+        if not base_url.endswith("/v1"):
+            base_url = base_url.rstrip("/") + "/v1"
         model = resolve_model_name()
 
         if not api_key:
