@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: var(--bg-base);
+  background: var(--bg-app);
 }
 
 /* ambient blobs */
@@ -49,7 +49,7 @@
   height: min(88vh, 840px);
   border-radius: var(--radius-xl);
   overflow: hidden;
-  border: 1px solid var(--bg-border);
+  border: 1px solid var(--border-color);
   box-shadow: var(--shadow-card), 0 0 0 1px rgba(255,255,255,.03) inset;
   animation: stageIn 500ms cubic-bezier(.22,1,.36,1) both;
 }
@@ -90,8 +90,8 @@
 .historySpinner {
   width: 32px;
   height: 32px;
-  border: 3px solid var(--bg-border);
-  border-top-color: var(--accent-gold);
+  border: 3px solid var(--border-color);
+  border-top-color: var(--color-primary);
   border-radius: 50%;
   animation: historySpin .8s linear infinite;
 }
@@ -128,7 +128,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 18px 28px;
-  border-bottom: 1px solid var(--bg-border);
+  border-bottom: 1px solid var(--border-color);
   background: rgba(255,255,255,.015);
   flex-shrink: 0;
   flex-wrap: wrap;
@@ -140,13 +140,13 @@
 }
 .logo {
   font-size: 1.8rem;
-  color: var(--accent-gold);
+  color: var(--color-primary);
   line-height: 1;
-  filter: drop-shadow(0 0 8px var(--accent-gold-glow));
+  filter: drop-shadow(0 0 8px var(--color-primary-glow));
   flex-shrink: 0;
 }
 .title {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: .06em;
@@ -163,7 +163,7 @@
 /* ── Skills loading indicator ────────────────────────────── */
 .skillsLoading {
   font-size: .7rem;
-  font-family: var(--font-mono);
+  font-family: var(--font-code);
   color: #4ade80;
   letter-spacing: .03em;
   animation: skillsFadeIn 300ms ease-out both, skillsFadeOut 600ms ease-in 1400ms both;
