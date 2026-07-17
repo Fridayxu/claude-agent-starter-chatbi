@@ -159,6 +159,8 @@ function AppInner() {
   const botMsgIdRef = useRef<string>('');
   const abortCtrlRef = useRef<AbortController | null>(null);
   const conversationIdRef = useRef<string>(activeConversationId);
+  const messagesRef = useRef<Message[]>([]);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
 
   // Keep ref in sync with state — sendMessageStream and other callbacks read from ref
   useEffect(() => {
@@ -612,6 +614,20 @@ function AppInner() {
         finishBotActivity();
         clearBotStreaming();
         finishStream();
+
+        // Auto-evolve: trigger skill improvement check (fire-and-forget)
+        const msgs = messagesRef.current;
+        if (msgs && msgs.length > 1) {
+          fetch('/skill-evolve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              conversation_id: conversationIdRef.current,
+              messages: msgs.map(m => ({ role: m.role, content: m.content })),
+            }),
+          }).catch(() => {}); // Silent — don't disrupt UX
+        }
+
         // Reconcile with backend so the title (and any other fields the runtime
         // synthesized) reflect the server's authoritative state.
         void refreshConversations('replace');
