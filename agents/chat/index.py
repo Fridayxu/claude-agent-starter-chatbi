@@ -523,18 +523,34 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
         except Exception as e:
             logger.error(f"[store] failed to save assistant response: {e}")
 
-    # ── Auto-detect generated files and emit download events ──
-    import glob as _glob
-    for _pattern in ("/tmp/*.xlsx", "/tmp/*.pdf", "/tmp/*.png"):
-        for _fp in _glob.glob(_pattern):
+    # ── Auto-detect generated files in sandbox and emit download events ──
+    sandbox = getattr(ctx, "sandbox", None)
+    if sandbox is not None:
+        for _ext in ("xlsx", "pdf", "png"):
             try:
-                _fname = os.path.basename(_fp)
-                with open(_fp, "rb") as _fh:
-                    _b64 = base64.b64encode(_fh.read()).decode()
-                yield sse_event("file_generated", {"name": _fname, "base64": _b64, "mime": _fp.rsplit(".",1)[-1]})
-                os.remove(_fp)  # Clean up
-                logger.log(f"[file_gen] emitted {_fname} ({len(_b64)} b64 chars)")
+                _result = await sandbox.commands.run(
+                    f"ls /tmp/*.{_ext} 2>/dev/null && for f in /tmp/*.{_ext}; do echo \"FILE:$f:$(base64 -w0 $f 2>/dev/null | head -c 500000)\"; done"
+                )
+                _out = getattr(_result, "stdout", "") or ""
+                if isinstance(_out, list):
+                    _out = "\n".join(_out)
+                for _line in str(_out).split("\n"):
+                    if _line.startswith("FILE:") and ":" in _line[5:]:
+                        _parts = _line[5:].split(":", 1)
+                        if len(_parts) == 2:
+                            _fp, _b64 = _parts
+                            _fname = os.path.basename(_fp.strip())
+                            _b64 = _b64.strip()
+                            if _fname and _b64 and len(_b64) > 10:
+                                _mime = _fp.rsplit(".", 1)[-1].strip()
+                                yield sse_event("file_generated", {"name": _fname, "base64": _b64, "mime": _mime})
+                                # Clean up sandbox file
+                                try:
+                                    await sandbox.commands.run(f"rm -f {_fp.strip()}")
+                                except:
+                                    pass
+                                logger.log(f"[file_gen] emitted {_fname} ({len(_b64)} b64 chars)")
             except Exception as _e:
-                logger.error(f"[file_gen] failed {_fp}: {_e}")
+                logger.error(f"[file_gen] scan failed for .{_ext}: {_e}")
 
     yield sse_event("done", {"stopped": stopped})
