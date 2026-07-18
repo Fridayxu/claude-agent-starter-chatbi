@@ -142,6 +142,10 @@ def build_agent_options(
     skill_read_allow_rules = [
         "Read(.claude/skills/**)",
         f"Read({cwd}/.claude/skills/**)",
+        "Read(harness/spec/**)",
+        "Read(harness/workflows/**)",
+        "Read(harness/rules/**)",
+        "Read(harness/evaluation/**)",
     ]
     # Merge incoming MCP tool names with the built-in Read scoping rules.
     # The Python SDK's `settings` field only accepts a JSON-file path
