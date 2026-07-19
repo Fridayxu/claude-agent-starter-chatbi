@@ -1,0 +1,13 @@
+name: hr分析报表
+domain: hr
+description: hr数据分析
+kpis:
+  - name: 关键指标
+    formula: sum(Value)
+    unit: 元
+charts:
+  - type: bar
+    title: 数据概览
+    x: Category
+    y: Value
+output: report.xlsx

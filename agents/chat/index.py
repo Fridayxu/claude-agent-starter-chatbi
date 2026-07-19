@@ -148,6 +148,7 @@ def build_agent_options(
         "Read(harness/workflows/**)",
         "Read(harness/rules/**)",
         "Read(harness/evaluation/**)",
+        "Write(.claude/skills/chatbi-analysis/kpi_memory.md)",
     ]
     # Merge incoming MCP tool names with the built-in Read scoping rules.
     # The Python SDK's `settings` field only accepts a JSON-file path

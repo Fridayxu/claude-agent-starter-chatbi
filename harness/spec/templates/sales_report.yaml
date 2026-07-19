@@ -1,0 +1,30 @@
+name: 销售分析报表
+domain: sales
+description: 销售收入、利润、产品、渠道综合分析
+kpis:
+  - name: 总营收
+    formula: sum(Revenue)
+    unit: 元
+  - name: 总利润
+    formula: sum(Revenue) - sum(Cost)
+    unit: 元
+  - name: 毛利率
+    formula: (sum(Revenue) - sum(Cost)) / sum(Revenue) * 100
+    unit: "%"
+  - name: 客单价
+    formula: sum(Revenue) / count(distinct OrderID)
+    unit: 元
+charts:
+  - type: line
+    title: 营收趋势
+    x: Date
+    y: Revenue
+  - type: bar
+    title: 各产品营收排名
+    x: Product
+    y: Revenue
+  - type: pie
+    title: 品类占比
+    x: Category
+    y: Revenue
+output: report.xlsx
