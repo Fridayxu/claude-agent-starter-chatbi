@@ -436,10 +436,9 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     if cid and store_adapter:
         try:
             history_msgs = await store_adapter.get_messages(conversation_id=cid, limit=30, order="asc")
-                # Exclude the just-saved current message
-                history_msgs = history_msgs[:-1] if history_msgs else []
-            except Exception as e:
-                logger.error(f"[gateway] history fetch failed: {e}")
+            history_msgs = history_msgs[:-1] if history_msgs else []
+        except Exception as e:
+            logger.error(f"[gateway] history fetch failed: {e}")
 
     logger.log(f"[gateway] model={model} history={len(history_msgs)} files={len(file_paths)}")
     async for event in _gateway_direct_stream(ctx, cid, user_message, history_msgs, api_key, base_url, model):
