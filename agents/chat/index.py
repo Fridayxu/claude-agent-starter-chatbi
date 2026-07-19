@@ -418,38 +418,35 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
         except Exception as e:
             logger.error(f"[store] failed to save user message: {e}")
 
-    # ═══ Routing: Gateway Direct for chat, SDK for file analysis ═══
-    has_files_in_sandbox = bool(file_paths)
-    if not has_files_in_sandbox and user_message.strip():
-        # Fast path: Gateway Direct — proper multi-turn memory, no SDK overhead
-        env = ctx.env
-        api_key = env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY", "")
-        base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://ai-gateway.edgeone.link/v1")
-        if not base_url.endswith("/v1"):
-            base_url = base_url.rstrip("/") + "/v1"
-        model = resolve_model_name()
+    # Gateway Direct for ALL requests
+    env = ctx.env
+    api_key = env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY", "")
+    base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://api.deepseek.com/v1")
+    if not base_url.endswith("/v1"):
+        base_url = base_url.rstrip("/") + "/v1"
+    model = env.get("AI_GATEWAY_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or "deepseek-chat"
 
-        if not api_key:
-            yield sse_event("error", {"message": "Missing AI_GATEWAY_API_KEY"})
-            yield sse_event("done", {"stopped": False})
-            return
+    if not api_key:
+        yield sse_event("error", {"message": "Missing AI_GATEWAY_API_KEY"})
+        yield sse_event("done", {"stopped": False})
+        return
 
-        # Fetch history for multi-turn memory
-        history_msgs: list = []
-        if cid and store_adapter:
-            try:
-                history_msgs = await store_adapter.get_messages(conversation_id=cid, limit=30, order="asc")
+    # Fetch history for multi-turn memory
+    history_msgs: list = []
+    if cid and store_adapter:
+        try:
+            history_msgs = await store_adapter.get_messages(conversation_id=cid, limit=30, order="asc")
                 # Exclude the just-saved current message
                 history_msgs = history_msgs[:-1] if history_msgs else []
             except Exception as e:
                 logger.error(f"[gateway] history fetch failed: {e}")
 
-        logger.log(f"[route] Gateway Direct (no files), history={len(history_msgs)}")
-        async for event in _gateway_direct_stream(ctx, cid, user_message, history_msgs, api_key, base_url, model):
-            yield event
-        return
+    logger.log(f"[gateway] model={model} history={len(history_msgs)} files={len(file_paths)}")
+    async for event in _gateway_direct_stream(ctx, cid, user_message, history_msgs, api_key, base_url, model):
+        yield event
+    return
 
-    # ═══ SDK path: file analysis with sandbox tools ═══
+    # ═══ Unreachable legacy SDK code below ═══
     if not _SDK_AVAILABLE:
         yield sse_event("error", {"message": "claude_agent_sdk is not installed"})
         yield sse_event("done", {"stopped": False})
