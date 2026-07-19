@@ -875,12 +875,20 @@ function AppInner() {
                 {l.icon} {l.label}
               </div>
             ))}
-            {skillInUse && (
-              <div className={styles.activityItem}>
+            {/* Active user-uploaded skills */}
+            {skillFiles.map((f,i)=>(
+              <div key={'sk-'+i} className={styles.activityItem}>
                 <span className={`${styles.activityDot} ${styles.skill}`} />
-                Skill: {skillInUse}
+                🧩 {f.name}
               </div>
-            )}
+            ))}
+            {/* Active user-uploaded templates */}
+            {templateFiles.map((f,i)=>(
+              <div key={'tpl-'+i} className={styles.activityItem}>
+                <span className={`${styles.activityDot} ${styles.skill}`} />
+                📋 {f.name}
+              </div>
+            ))}
             {downloads.map((d,i)=>(
               <button key={i} className={styles.downloadBtn} onClick={d.onClick}>
                 📥 {d.name}
