@@ -65,31 +65,23 @@ MCP_SERVER_NAME = "edgeone"
 _file_cache: dict[str, list[dict]] = {}
 
 SYSTEM_PROMPT = (
-  'You are ChatBI, a business data analyst. Parse natural language → analyze data → deliver reports.\n'
-  'Speak Chinese to Chinese-speaking users.\n\n'
-  '## BUILT-IN Workflow (follow this EXACT order — no Skill tool needed)\n'
-  '### Phase 1: Quick Preview\n'
-  'When user uploads data: `ls /tmp/` → `head` to preview each file.\n'
-  'If >1 file: use code_interpreter to detect common columns (JOIN keys).\n'
-  'Report: rows×cols, column names, JOIN keys, any quality issues.\n'
-  'If data is messy → use Skill tool to load clean-data-xls.\n\n'
-  '### Phase 2: Confirm Direction\n'
-  'Based on columns, suggest 2-3 analysis directions. Let user choose.\n'
-  'If user already specified: confirm understanding briefly, then proceed.\n'
-  'For methodology, Read harness/spec/tasks/ matching the direction.\n\n'
-  '### Phase 3: Save File FIRST, Then Summarize\n'
-  '1. Use code_interpreter to generate AND save the deliverable to /tmp/:\n'
-  '   - HTML: code = "open(\"/tmp/dashboard.html\",\"w\").write(html_content)"\n'
-  '   - Excel: code = "import openpyxl; wb.save(\"/tmp/report.xlsx\")"\n'
-  '   - PDF: save to /tmp/report.pdf\n'
-  '2. After saving, write a brief text summary (2-3 sentences).\n'
-  'The saved file auto-downloads to the user — that is the primary deliverable.\n\n'
-  '## Tools\n'
-  'code_interpreter (Python), commands (shell), files (sandbox I/O), browser.\n'
-  'Loadable skills: clean-data-xls, humanizer-zh, markitdown, pdf-report.\n\n'
+  'You are ChatBI, a business data analyst. Parse natural language, analyze data, deliver reports.\n'
+  'Speak Chinese to Chinese-speaking users. Be concise.\n\n'
+  '## Available Functions (call via function calling — DO NOT simulate)\n'
+  '- list_files: see what files are in /tmp/\n'
+  '- read_file(filename): preview first 50 rows of a CSV/Excel file\n'
+  '- code_interpreter(code): execute Python (pandas, openpyxl, matplotlib, Chart.js HTML). Save outputs to /tmp/.\n\n'
+  '## Workflow\n'
+  '### Phase 1: list_files → read_file to preview data. Report rows×cols, columns, any quality issues.\n'
+  '### Phase 2: Suggest 2-3 analysis directions. Let user choose or proceed if already specified.\n'
+  '### Phase 3: Use code_interpreter to analyze AND save deliverable to /tmp/:\n'
+  '- HTML dashboard: code_interpreter saves .html file → auto-download\n'
+  '- Excel report: code_interpreter with openpyxl saves .xlsx → auto-download\n\n'
   '## Rules\n'
-  'Save deliverable file to /tmp/ BEFORE writing your text summary.\n'
-  'Never retry failed tools. No simulated results. Greetings ≤5 words.'
+  'ALWAYS use real function calls — never write fake tool call text.\n'
+  'Save deliverable file to /tmp/ with proper extension (html/xlsx).\n'
+  'If data has quality issues, fix with code_interpreter first.\n'
+  'Greetings ≤5 words.'
 )
 
 
@@ -187,79 +179,110 @@ def build_agent_options(
     return opts
 
 
+# Tool definitions for OpenAI function calling
+GW_TOOLS = [
+    {"type":"function","function":{"name":"code_interpreter","description":"Execute Python code. Use for data analysis, statistics, charts, file generation. Save output files to /tmp/.","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python code to execute"}},"required":["code"]}}},
+    {"type":"function","function":{"name":"read_file","description":"Read first 50 rows of a CSV/Excel file from /tmp/ for preview.","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"File name in /tmp/"}},"required":["filename"]}}},
+    {"type":"function","function":{"name":"list_files","description":"List files in /tmp/ available for analysis.","parameters":{"type":"object","properties":{}}}},
+]
+
+def _gw_exec_tool(name: str, args: dict) -> str:
+    """Execute a tool for Gateway Direct. Uses subprocess for Python."""
+    if name == "code_interpreter":
+        code = args.get("code", "")
+        try:
+            r = subprocess.run(["python","-c",code], capture_output=True, text=True, timeout=120, cwd="/tmp", env={**os.environ,"PYTHONUNBUFFERED":"1","MPLBACKEND":"Agg"})
+            return (r.stdout or "") + ("\n## stderr\n"+r.stderr if r.stderr else "")
+        except subprocess.TimeoutExpired: return "Timeout after 120s"
+        except Exception as e: return f"Error: {e}"
+    elif name == "read_file":
+        fn = args.get("filename","")
+        fp = Path("/tmp")/fn
+        if not fp.exists(): return f"File not found: {fn}"
+        try:
+            code = f"import pandas as pd; df=pd.read_csv('{fp}') if '{fn}'.endswith('.csv') else pd.read_excel('{fp}'); print(f'Shape: {{df.shape}}'); print(df.head(50).to_string())"
+            r = subprocess.run(["python","-c",code], capture_output=True, text=True, timeout=30, cwd="/tmp")
+            return r.stdout or f"Error: {r.stderr}"
+        except Exception as e: return f"Read error: {e}"
+    elif name == "list_files":
+        try:
+            fps = list(Path("/tmp").glob("*"))
+            return "\n".join(f"{f.name} ({f.stat().st_size} bytes)" for f in fps[:50]) or "/tmp/ is empty"
+        except Exception as e: return f"Error: {e}"
+    return f"Unknown tool: {name}"
+
+
 async def _gateway_direct_stream(
     ctx: Any, cid: str, user_message: str, history_msgs: list,
     api_key: str, base_url: str, model: str,
 ) -> AsyncGenerator[str, None]:
-    """Gateway Direct path — standard OpenAI-compatible multi-turn chat.
-    Fast (no SDK overhead) with proper message-role memory."""
+    """Gateway Direct with OpenAI function calling."""
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    # Add conversation history with proper role tags
     for m in history_msgs:
         role = getattr(m, "role", "user")
         content = getattr(m, "content", "")
         if content and role in ("user", "assistant"):
             messages.append({"role": role, "content": str(content)[:4000]})
-
-    # Add current message
     messages.append({"role": "user", "content": user_message})
 
-    logger.log(f"[gateway] streaming with {len(messages)} messages (history={len(history_msgs)})")
+    logger.log(f"[gateway] {len(messages)} msgs, model={model}")
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        try:
-            async with client.stream(
-                "POST",
-                f"{base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": True,
-                },
-            ) as response:
-                if response.status_code != 200:
-                    body = await response.aread()
-                    yield sse_event("error", {"message": f"Gateway {response.status_code}: {body.decode()[:300]}"})
-                    yield sse_event("done", {"stopped": False})
-                    return
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        turn = 0; max_turns = 10; assistant_text = ""
+        while turn < max_turns:
+            turn += 1
+            if ctx.request.signal.is_set(): break
 
-                assistant_text = ""
-                async for line in response.aiter_lines():
-                    if ctx.request.signal.is_set():
-                        break
-                    if not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data_str)
-                        delta = chunk.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content", "")
-                        if content:
-                            assistant_text += content
-                            yield sse_event("text_delta", {"delta": content})
-                    except (json.JSONDecodeError, KeyError):
-                        pass
+            try:
+                resp = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}","Content-Type":"application/json"},
+                    json={"model":model,"messages":messages,"tools":GW_TOOLS,"tool_choice":"auto","stream":False},
+                )
+            except Exception as e:
+                yield sse_event("error", {"message": f"API: {e}"}); break
 
-                # Save assistant message
-                if cid and assistant_text.strip():
-                    try:
-                        await ctx.store.append_message(conversation_id=cid, role="assistant", content=assistant_text.strip())
-                    except Exception as e:
-                        logger.error(f"[gateway] failed to save: {e}")
+            if resp.status_code != 200:
+                yield sse_event("error", {"message": f"Gateway {resp.status_code}: {resp.text[:300]}"}); break
 
-        except httpx.ReadError:
-            if not ctx.request.signal.is_set():
-                yield sse_event("error", {"message": "Stream interrupted"})
-        except Exception as e:
-            logger.error(f"[gateway] error: {e}")
-            yield sse_event("error", {"message": str(e)})
+            data = resp.json(); choice = data.get("choices",[{}])[0]; msg = choice.get("message",{})
+            tool_calls = msg.get("tool_calls",[])
+
+            if tool_calls:
+                messages.append({"role":"assistant","content":None,"tool_calls":tool_calls})
+                for tc in tool_calls:
+                    fn = tc.get("function",{}); tname = fn.get("name",""); targs = fn.get("arguments","{}")
+                    try: targs = json.loads(targs) if isinstance(targs,str) else targs
+                    except: targs = {}
+                    yield sse_event("tool_called", {"tool": tname})
+                    result = _gw_exec_tool(tname, targs)
+                    messages.append({"role":"tool","tool_call_id":tc.get("id",""),"content":result[:4000]})
+                continue
+
+            content = msg.get("content","")
+            if content:
+                assistant_text = content
+                for i in range(0, len(content), 4):
+                    if ctx.request.signal.is_set(): break
+                    yield sse_event("text_delta", {"delta": content[i:i+4]})
+                break
+            break
+
+    # Auto-detect generated files in /tmp/ and emit download events
+    import glob as _g
+    for _ext in ("xlsx","pdf","png","html"):
+        for _fp in _g.glob(f"/tmp/*.{_ext}"):
+            try:
+                _fn = os.path.basename(_fp)
+                with open(_fp,"rb") as _fh: _b64 = base64.b64encode(_fh.read()).decode()
+                yield sse_event("file_generated",{"name":_fn,"base64":_b64,"mime":_ext})
+                os.remove(_fp)
+                logger.log(f"[file_gen] {_fn} ({len(_b64)} b64)")
+            except Exception as _e: logger.error(f"[file_gen] {_e}")
+
+    if cid and assistant_text.strip():
+        try: await ctx.store.append_message(conversation_id=cid, role="assistant", content=assistant_text.strip())
+        except Exception as e: logger.error(f"[gateway] save: {e}")
 
     yield sse_event("done", {"stopped": False})
 
@@ -318,33 +341,13 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
 
             try:
                 raw = base64.b64decode(b64)
-                # Text files (CSV, JSON, TXT): write via sandbox.files.write (UTF-8 only)
-                if mime and ("csv" in mime or "json" in mime or "text" in mime or "txt" in mime):
-                    text = raw.decode("utf-8", errors="replace")
-                    if sandbox and hasattr(sandbox, "files"):
-                        await sandbox.files.write(fpath, text)
-                        logger.log(f"[sandbox] wrote {fname} ({len(text)} chars) to {fpath}")
-                    else:
-                        # Fallback: embed in message (sandbox unavailable)
-                        truncated = text[:50000]
-                        user_message = f"[File: {fname}]\n{truncated}\n\n{user_message}"
-                        logger.log(f"[fallback] embedded {fname} ({len(truncated)} chars) in message")
-                else:
-                    # Binary files (Excel etc): write base64, decode in sandbox via commands
-                    if sandbox and hasattr(sandbox, "files"):
-                        await sandbox.files.write(fpath + ".b64", b64)
-                        logger.log(f"[sandbox] wrote {fname}.b64 ({len(b64)} b64 chars) to {fpath}.b64")
-                        file_paths.append(f"{fpath}.b64 (base64-encoded, decode with: base64 -d {fpath}.b64 > {fpath})")
-                        continue
-                    else:
-                        truncated = b64[:50000]
-                        user_message = f"[Binary file: {fname}]\n```base64\n{truncated}\n```\n\n{user_message}"
-                        logger.log(f"[fallback] embedded binary {fname} in message")
-                        continue
-
+                os.makedirs("/tmp", exist_ok=True)
+                with open(fpath, "wb") as fh:
+                    fh.write(raw)
                 file_paths.append(fpath)
+                logger.log(f"[file] wrote {fname} ({len(raw)} bytes) to {fpath}")
             except Exception as e:
-                logger.error(f"[sandbox] failed to write {fname}: {e}")
+                logger.error(f"[file] failed to write {fname}: {e}")
                 # Last resort: embed truncated content
                 truncated = b64[:30000]
                 user_message = f"[File: {fname} (write failed: {e})]\n```base64\n{truncated}\n```\n\n{user_message}"
