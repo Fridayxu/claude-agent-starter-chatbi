@@ -65,31 +65,21 @@ MCP_SERVER_NAME = "edgeone"
 _file_cache: dict[str, list[dict]] = {}
 
 SYSTEM_PROMPT = (
-  'You are ChatBI, a business data analyst. Parse natural language → analyze data → deliver reports.\n'
-  'Speak Chinese to Chinese-speaking users.\n\n'
-  '## BUILT-IN Workflow (follow this EXACT order — no Skill tool needed)\n'
-  '### Phase 1: Quick Preview\n'
-  'When user uploads data: `ls /tmp/` → `head` to preview each file.\n'
-  'If >1 file: use code_interpreter to detect common columns (JOIN keys).\n'
-  'Report: rows×cols, column names, JOIN keys, any quality issues.\n'
-  'If data is messy → use Skill tool to load clean-data-xls.\n\n'
-  '### Phase 2: Confirm Direction\n'
-  'Based on columns, suggest 2-3 analysis directions. Let user choose.\n'
-  'If user already specified: confirm understanding briefly, then proceed.\n'
-  'For methodology, Read harness/spec/tasks/ matching the direction.\n\n'
-  '### Phase 3: Save File FIRST, Then Summarize\n'
-  '1. Use code_interpreter to generate AND save the deliverable to /tmp/:\n'
-  '   - HTML: code = "open(\"/tmp/dashboard.html\",\"w\").write(html_content)"\n'
-  '   - Excel: code = "import openpyxl; wb.save(\"/tmp/report.xlsx\")"\n'
-  '   - PDF: save to /tmp/report.pdf\n'
-  '2. After saving, write a brief text summary (2-3 sentences).\n'
-  'The saved file auto-downloads to the user — that is the primary deliverable.\n\n'
-  '## Tools\n'
-  'code_interpreter (Python), commands (shell), files (sandbox I/O), browser.\n'
-  'Loadable skills: clean-data-xls, humanizer-zh, markitdown, pdf-report.\n\n'
+  'You are ChatBI, a business data analyst. Parse natural language, analyze data, deliver reports.\n'
+  'Speak Chinese to Chinese-speaking users. Be concise.\n\n'
+  '## Available Functions (use function calling — DO NOT simulate)\n'
+  '- list_files: see what files are in /tmp/\n'
+  '- read_file(filename): preview first 50 rows of a CSV/Excel file from /tmp/\n'
+  '- code_interpreter(code): execute Python (pandas,openpyxl,matplotlib). Save outputs to /tmp/.\n\n'
+  '## Workflow\n'
+  'Phase 1: list_files → read_file to preview. Report rows×cols, columns, quality.\n'
+  'Phase 2: Suggest 2-3 directions, or proceed if user specified.\n'
+  'Phase 3: code_interpreter to analyze AND save deliverable to /tmp/:\n'
+  '  HTML: open("/tmp/dashboard.html","w").write(html) → auto-download\n'
+  '  Excel: openpyxl wb.save("/tmp/report.xlsx") → auto-download\n\n'
   '## Rules\n'
-  'Save deliverable file to /tmp/ BEFORE writing your text summary.\n'
-  'Never retry failed tools. No simulated results. Greetings ≤5 words.'
+  'ALWAYS call real functions — never write fake tool call text.\n'
+  'Save file to /tmp/ before text summary. Greetings ≤5 words.'
 )
 
 
@@ -205,61 +195,72 @@ async def _gateway_direct_stream(
     # Add current message
     messages.append({"role": "user", "content": user_message})
 
-    logger.log(f"[gateway] streaming with {len(messages)} messages (history={len(history_msgs)})")
+    logger.log(f"[gateway] {len(messages)} msgs, model={model}")
 
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        try:
-            async with client.stream(
-                "POST",
-                f"{base_url}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": model,
-                    "messages": messages,
-                    "stream": True,
-                },
-            ) as response:
-                if response.status_code != 200:
-                    body = await response.aread()
-                    yield sse_event("error", {"message": f"Gateway {response.status_code}: {body.decode()[:300]}"})
-                    yield sse_event("done", {"stopped": False})
-                    return
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        turn = 0; max_turns = 10; assistant_text = ""
+        while turn < max_turns:
+            turn += 1
+            if ctx.request.signal.is_set(): break
+            try:
+                resp = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers={"Authorization": f"Bearer {api_key}","Content-Type":"application/json"},
+                    json={"model":model,"messages":messages,"tools":GW_TOOLS,"tool_choice":"auto","stream":False},
+                )
+            except Exception as e:
+                yield sse_event("error", {"message": f"API: {e}"}); break
+            if resp.status_code != 200:
+                yield sse_event("error", {"message": f"Gateway {resp.status_code}: {resp.text[:300]}"}); break
 
-                assistant_text = ""
-                async for line in response.aiter_lines():
-                    if ctx.request.signal.is_set():
-                        break
-                    if not line.startswith("data: "):
-                        continue
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        break
+            data = resp.json(); choice = data.get("choices",[{}])[0]; msg = choice.get("message",{})
+            tool_calls = msg.get("tool_calls",[])
+
+            if tool_calls:
+                for tc in tool_calls:
+                    fn = tc.get("function",{}); tname = fn.get("name",""); targs = fn.get("arguments","{}")
+                    try: targs = json.loads(targs) if isinstance(targs,str) else targs
+                    except: targs = {}
+                    yield sse_event("tool_called", {"tool": tname})
                     try:
-                        chunk = json.loads(data_str)
-                        delta = chunk.get("choices", [{}])[0].get("delta", {})
-                        content = delta.get("content", "")
-                        if content:
-                            assistant_text += content
-                            yield sse_event("text_delta", {"delta": content})
-                    except (json.JSONDecodeError, KeyError):
-                        pass
+                        result = _gw_exec_tool(tname, targs)
+                        logger.log(f"[tool] {tname} -> {len(result)} chars")
+                    except Exception as te:
+                        result = f"Tool error: {te}"
+                messages.append({"role":"assistant","content":None,"tool_calls":tool_calls})
+                for tc in tool_calls:
+                    fn = tc.get("function",{}); tname = fn.get("name","")
+                    targs_str = fn.get("arguments","{}")
+                    try: targs = json.loads(targs_str) if isinstance(targs_str,str) else targs_str
+                    except: targs = {}
+                    result = _gw_exec_tool(tname, targs) if tname else ""
+                    messages.append({"role":"tool","tool_call_id":tc.get("id",""),"content":str(result)[:4000]})
+                continue
 
-                # Save assistant message
-                if cid and assistant_text.strip():
-                    try:
-                        await ctx.store.append_message(conversation_id=cid, role="assistant", content=assistant_text.strip())
-                    except Exception as e:
-                        logger.error(f"[gateway] failed to save: {e}")
+            content = msg.get("content","")
+            if content:
+                assistant_text = content
+                for i in range(0, len(content), 4):
+                    if ctx.request.signal.is_set(): break
+                    yield sse_event("text_delta", {"delta": content[i:i+4]})
+                break
+            break
 
-        except httpx.ReadError:
-            if not ctx.request.signal.is_set():
-                yield sse_event("error", {"message": "Stream interrupted"})
-        except Exception as e:
-            logger.error(f"[gateway] error: {e}")
-            yield sse_event("error", {"message": str(e)})
+    # Auto-detect generated files
+    import glob as _g
+    for _ext in ("xlsx","pdf","png","html"):
+        for _fp in _g.glob(f"/tmp/*.{_ext}"):
+            try:
+                _fn = os.path.basename(_fp)
+                with open(_fp,"rb") as _fh: _b64 = base64.b64encode(_fh.read()).decode()
+                yield sse_event("file_generated",{"name":_fn,"base64":_b64,"mime":_ext})
+                os.remove(_fp)
+                logger.log(f"[file_gen] {_fn} ({len(_b64)} b64)")
+            except Exception as _e: logger.error(f"[file_gen] {_e}")
+
+    if cid and assistant_text.strip():
+        try: await ctx.store.append_message(conversation_id=cid, role="assistant", content=assistant_text.strip())
+        except Exception as e: logger.error(f"[gateway] save: {e}")
 
     yield sse_event("done", {"stopped": False})
 
@@ -318,36 +319,12 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
 
             try:
                 raw = base64.b64decode(b64)
-                # Text files (CSV, JSON, TXT): write via sandbox.files.write (UTF-8 only)
-                if mime and ("csv" in mime or "json" in mime or "text" in mime or "txt" in mime):
-                    text = raw.decode("utf-8", errors="replace")
-                    if sandbox and hasattr(sandbox, "files"):
-                        await sandbox.files.write(fpath, text)
-                        logger.log(f"[sandbox] wrote {fname} ({len(text)} chars) to {fpath}")
-                    else:
-                        # Fallback: embed in message (sandbox unavailable)
-                        truncated = text[:50000]
-                        user_message = f"[File: {fname}]\n{truncated}\n\n{user_message}"
-                        logger.log(f"[fallback] embedded {fname} ({len(truncated)} chars) in message")
-                else:
-                    # Binary files (Excel etc): write base64, decode in sandbox via commands
-                    if sandbox and hasattr(sandbox, "files"):
-                        await sandbox.files.write(fpath + ".b64", b64)
-                        logger.log(f"[sandbox] wrote {fname}.b64 ({len(b64)} b64 chars) to {fpath}.b64")
-                        file_paths.append(f"{fpath}.b64 (base64-encoded, decode with: base64 -d {fpath}.b64 > {fpath})")
-                        continue
-                    else:
-                        truncated = b64[:50000]
-                        user_message = f"[Binary file: {fname}]\n```base64\n{truncated}\n```\n\n{user_message}"
-                        logger.log(f"[fallback] embedded binary {fname} in message")
-                        continue
-
+                os.makedirs("/tmp", exist_ok=True)
+                with open(fpath, "wb") as fh: fh.write(raw)
                 file_paths.append(fpath)
+                logger.log(f"[file] wrote {fname} ({len(raw)} bytes) to {fpath}")
             except Exception as e:
-                logger.error(f"[sandbox] failed to write {fname}: {e}")
-                # Last resort: embed truncated content
-                truncated = b64[:30000]
-                user_message = f"[File: {fname} (write failed: {e})]\n```base64\n{truncated}\n```\n\n{user_message}"
+                logger.error(f"[file] failed {fname}: {e}")
 
         if file_paths:
             path_list = "\n".join(f"  - {p}" for p in file_paths)
@@ -418,39 +395,31 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
         except Exception as e:
             logger.error(f"[store] failed to save user message: {e}")
 
-    # ═══ Routing: Gateway Direct for chat, SDK for file analysis ═══
-    has_files_in_sandbox = bool(file_paths)
-    if not has_files_in_sandbox and user_message.strip():
-        # Fast path: Gateway Direct — proper multi-turn memory, no SDK overhead
-        env = ctx.env
-        api_key = env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY", "")
-        base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://ai-gateway.edgeone.link/v1")
-        if not base_url.endswith("/v1"):
-            base_url = base_url.rstrip("/") + "/v1"
-        model = resolve_model_name()
-        # Fallback for self-paid: try os.environ if ctx.env didn't have it
-        if not model or "@makers" in (model or ""):
-            model = env.get("AI_GATEWAY_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or model
+    # All requests: Gateway Direct + Function Calling
+    env = ctx.env
+    api_key = env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY", "")
+    base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://ai-gateway.edgeone.link/v1")
+    if not base_url.endswith("/v1"):
+        base_url = base_url.rstrip("/") + "/v1"
+    model = env.get("AI_GATEWAY_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or "deepseek/deepseek-v4-pro"
 
-        if not api_key:
-            yield sse_event("error", {"message": "Missing AI_GATEWAY_API_KEY"})
-            yield sse_event("done", {"stopped": False})
-            return
-
-        # Fetch history for multi-turn memory
-        history_msgs: list = []
-        if cid and store_adapter:
-            try:
-                history_msgs = await store_adapter.get_messages(conversation_id=cid, limit=30, order="asc")
-                # Exclude the just-saved current message
-                history_msgs = history_msgs[:-1] if history_msgs else []
-            except Exception as e:
-                logger.error(f"[gateway] history fetch failed: {e}")
-
-        logger.log(f"[route] Gateway Direct (no files), history={len(history_msgs)}")
-        async for event in _gateway_direct_stream(ctx, cid, user_message, history_msgs, api_key, base_url, model):
-            yield event
+    if not api_key:
+        yield sse_event("error", {"message": "Missing AI_GATEWAY_API_KEY"})
+        yield sse_event("done", {"stopped": False})
         return
+
+    history_msgs: list = []
+    if cid and store_adapter:
+        try:
+            history_msgs = await store_adapter.get_messages(conversation_id=cid, limit=30, order="asc")
+            history_msgs = history_msgs[:-1] if history_msgs else []
+        except Exception as e:
+            logger.error(f"[gateway] history: {e}")
+
+    logger.log(f"[gateway] model={model} history={len(history_msgs)} files={len(file_paths)}")
+    async for event in _gateway_direct_stream(ctx, cid, user_message, history_msgs, api_key, base_url, model):
+        yield event
+    return
 
     # ═══ SDK path: file analysis with sandbox tools ═══
     if not _SDK_AVAILABLE:
