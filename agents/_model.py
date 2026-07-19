@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or "deepseek-chat"
+CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or "@makers/deepseek-v4-flash"
 
 
 def collect_gateway_env() -> dict[str, str]:
