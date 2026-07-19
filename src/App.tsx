@@ -134,7 +134,9 @@ function AppInner() {
   const [statusText, setStatusText] = useState('');
   const [downloads, setDownloads] = useState<Array<{name:string,onClick:()=>void}>>([]);
   const [templateFiles, setTemplateFiles] = useState<FileInfo[]>([]);
+  const [skillFiles, setSkillFiles] = useState<FileInfo[]>([]);
   const templateInputRef = useRef<HTMLInputElement>(null);
+  const skillInputRef = useRef<HTMLInputElement>(null);
 
   const handleTemplateUpload = (e: ChangeEvent<HTMLInputElement>) => {
     for (const file of e.target.files || []) {
@@ -146,6 +148,22 @@ function AppInner() {
       reader.onload = () => {
         const b64 = (reader.result as string).split(',')[1] || '';
         setTemplateFiles(prev => [...prev, { name: file.name, content: b64, mimeType: 'text/yaml' }]);
+      };
+      reader.readAsDataURL(file);
+    }
+    if (e.target) e.target.value = '';
+  };
+
+  const handleSkillUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    for (const file of e.target.files || []) {
+      if (!file.name.endsWith('.md')) {
+        alert('仅支持 .md 技能文件');
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const b64 = (reader.result as string).split(',')[1] || '';
+        setSkillFiles(prev => [...prev, { name: file.name.replace('.md',''), content: b64, mimeType: 'text/markdown' }]);
       };
       reader.readAsDataURL(file);
     }
@@ -654,10 +672,11 @@ function AppInner() {
         updateBotMessage(content => content || t("status.error"));
         finishStream();
       },
-    }, conversationIdRef.current, { userMsgId: newMsgs[newMsgs.length - 1]?.id || '', botMsgId }, eoUuidRef.current, files.length > 0 ? files : undefined, templateFiles.length > 0 ? templateFiles : undefined);
+    }, conversationIdRef.current, { userMsgId: newMsgs[newMsgs.length - 1]?.id || '', botMsgId }, eoUuidRef.current, files.length > 0 ? files : undefined, templateFiles.length > 0 ? templateFiles : undefined, skillFiles.length > 0 ? skillFiles : undefined);
 
-    // Clear templates after sending
+    // Clear uploads after sending
     if (templateFiles.length > 0) setTemplateFiles([]);
+    if (skillFiles.length > 0) setSkillFiles([]);
 
     abortCtrlRef.current = ctrl;
   }, [updateBotMessage, setBotActivity, finishBotActivity, clearBotStreaming, handleImageEvent, finishStream, refreshConversations, t]);
@@ -893,6 +912,31 @@ function AppInner() {
             ))}
             {templateFiles.length===0 && (
               <div style={{fontSize:'.55rem',color:'var(--text-muted)',marginTop:'4px'}}>默认: sales, finance, HR, ops, marketing</div>
+            )}
+          </div>
+          {/* Skills upload section */}
+          <div style={{borderTop:'1px solid var(--border-color)',padding:'10px 14px',flexShrink:0}}>
+            <div style={{fontSize:'.65rem',fontWeight:600,color:'var(--text-secondary)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'.04em'}}>🧩 Skills</div>
+            <input ref={skillInputRef} type="file" accept=".md" onChange={handleSkillUpload} style={{display:'none'}} />
+            <button
+              onClick={() => skillInputRef.current?.click()}
+              disabled={loading}
+              style={{
+                width:'100%',padding:'5px 10px',borderRadius:'var(--radius-sm)',
+                border:'1px dashed var(--border-color)',background:'transparent',
+                color:'var(--text-muted)',fontSize:'.62rem',cursor:'pointer',
+                fontFamily:'var(--font-code)',textAlign:'center'
+              }}>
+              + Upload .md skill
+            </button>
+            {skillFiles.map((f,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:'4px',marginTop:'4px',fontSize:'.6rem',color:'var(--text-secondary)'}}>
+                🧩 {f.name}
+                <button onClick={()=>setSkillFiles(prev=>prev.filter((_,j)=>j!==i))} style={{marginLeft:'auto',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>×</button>
+              </div>
+            ))}
+            {skillFiles.length===0 && (
+              <div style={{fontSize:'.55rem',color:'var(--text-muted)',marginTop:'4px'}}>默认: chatbi-analysis, clean-data-xls 等</div>
             )}
           </div>
         </div>

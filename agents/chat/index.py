@@ -270,6 +270,7 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     user_message: str = body.get("message", "") if isinstance(body, dict) else ""
     uploaded_files: list[dict] = body.get("files", []) if isinstance(body, dict) else []
     uploaded_templates: list[dict] = body.get("templates", []) if isinstance(body, dict) else []
+    uploaded_skills: list[dict] = body.get("skills", []) if isinstance(body, dict) else []
 
     # Handle template uploads — save to /tmp/user-templates/
     template_paths: list[str] = []
@@ -353,11 +354,36 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
             else:
                 user_message = file_note + user_message
 
+    # Handle skill uploads — save to /tmp/user-skills/
+    skill_paths: list[str] = []
+    if uploaded_skills:
+        sandbox2 = getattr(ctx, "sandbox", None)
+        for sk in uploaded_skills:
+            sk_name = sk.get("name", "skill") + ".md"
+            sk_content = sk.get("content", "")
+            sk_path = f"/tmp/user-skills/{sk_name}"
+            try:
+                raw = base64.b64decode(sk_content)
+                text = raw.decode("utf-8", errors="replace")
+                if sandbox2 and hasattr(sandbox2, "files"):
+                    await sandbox2.files.make_dir("/tmp/user-skills")
+                    await sandbox2.files.write(sk_path, text)
+                    skill_paths.append(sk_path)
+                    logger.log(f"[skill] saved {sk_name} to {sk_path}")
+            except Exception as e:
+                logger.error(f"[skill] failed to save {sk_name}: {e}")
+
     # Add template info to message
     if template_paths:
         tpl_list = "\n".join(f"  - {p}" for p in template_paths)
         tpl_note = f"\n\nUser uploaded report templates:\n{tpl_list}\nUse these templates instead of defaults. Read with code_interpreter: `open('/tmp/user-templates/filename')`\n"
         user_message = (user_message or "") + tpl_note
+
+    # Add skill info to message
+    if skill_paths:
+        sk_list = "\n".join(f"  - {p}" for p in skill_paths)
+        sk_note = f"\n\nUser uploaded custom skills:\n{sk_list}\nUse Skill tool to LOAD these skills before analysis.\n"
+        user_message = (user_message or "") + sk_note
 
     logger.log(f"[file] {len(file_paths)} files in sandbox, message size={len(user_message)} chars")
 

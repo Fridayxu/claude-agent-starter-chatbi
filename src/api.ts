@@ -97,6 +97,7 @@ export function sendMessageStream(
   userId?: string,
   files?: Array<{name:string,content:string,mimeType:string}>,
   templates?: Array<{name:string,content:string,mimeType:string}>,
+  skills?: Array<{name:string,content:string,mimeType:string}>,
 ): AbortController {
   const ctrl = new AbortController();
 
@@ -120,6 +121,9 @@ export function sendMessageStream(
       }
       if (templates && templates.length > 0) {
         body.templates = templates;
+      }
+      if (skills && skills.length > 0) {
+        body.skills = skills;
       }
 
       const res = await fetch(API.chat, {
