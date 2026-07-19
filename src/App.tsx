@@ -630,7 +630,7 @@ function AppInner() {
       },
 
       onFileGenerated({ name, base64: b64, mime }) {
-        const mimeMap: Record<string,string> = { xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pdf:'application/pdf', png:'image/png' };
+        const mimeMap: Record<string,string> = { xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pdf:'application/pdf', png:'image/png', html:'text/html' };
         const m = mimeMap[mime] || 'application/octet-stream';
         // Auto-download the file immediately
         const a = document.createElement('a');
