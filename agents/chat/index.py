@@ -177,6 +177,35 @@ def build_agent_options(
     return opts
 
 
+GW_TOOLS = [
+    {"type":"function","function":{"name":"code_interpreter","description":"Execute Python code for data analysis (pandas,openpyxl,matplotlib). Save output files to /tmp/.","parameters":{"type":"object","properties":{"code":{"type":"string","description":"Python code to execute"}},"required":["code"]}}},
+    {"type":"function","function":{"name":"read_file","description":"Preview first 50 rows of a CSV/Excel file from /tmp/. Returns shape, columns, and data preview.","parameters":{"type":"object","properties":{"filename":{"type":"string","description":"File name in /tmp/ to read"}},"required":["filename"]}}},
+    {"type":"function","function":{"name":"list_files","description":"List all files available for analysis in /tmp/. Call this first when user uploads data.","parameters":{"type":"object","properties":{}}}},
+]
+
+def _gw_exec_tool(name: str, args: dict) -> str:
+    if name == "code_interpreter":
+        code = args.get("code","")
+        try:
+            r = subprocess.run(["python","-c",code],capture_output=True,text=True,timeout=120,cwd="/tmp",env={**os.environ,"MPLBACKEND":"Agg","PYTHONUNBUFFERED":"1"})
+            return (r.stdout or "(no output)") + ("\n##stderr\n"+r.stderr if r.stderr else "")
+        except subprocess.TimeoutExpired: return "Timeout 120s"
+        except Exception as e: return f"Error: {e}"
+    elif name == "read_file":
+        fn = args.get("filename",""); fp = Path("/tmp")/fn
+        if not fp.exists(): return f"Not found: {fn}"
+        try:
+            code = f"import pandas as pd; df=pd.read_csv('{fp}') if '{fn}'.endswith('.csv') else pd.read_excel('{fp}'); print(f'Shape: {{df.shape}}'); print(df.head(50).to_string())"
+            r = subprocess.run(["python","-c",code],capture_output=True,text=True,timeout=30,cwd="/tmp")
+            return r.stdout or f"Error: {r.stderr}"
+        except Exception as e: return f"Read error: {e}"
+    elif name == "list_files":
+        try:
+            fps = list(Path("/tmp").glob("*"))
+            return "\n".join(f"{f.name} ({f.stat().st_size} bytes)" for f in fps[:50]) or "/tmp/ is empty"
+        except Exception as e: return f"Error: {e}"
+    return f"Unknown tool: {name}"
+
 async def _gateway_direct_stream(
     ctx: Any, cid: str, user_message: str, history_msgs: list,
     api_key: str, base_url: str, model: str,
@@ -217,24 +246,21 @@ async def _gateway_direct_stream(
             tool_calls = msg.get("tool_calls",[])
 
             if tool_calls:
+                results = {}  # Cache: tool_call_id -> result
                 for tc in tool_calls:
                     fn = tc.get("function",{}); tname = fn.get("name",""); targs = fn.get("arguments","{}")
                     try: targs = json.loads(targs) if isinstance(targs,str) else targs
                     except: targs = {}
                     yield sse_event("tool_called", {"tool": tname})
                     try:
-                        result = _gw_exec_tool(tname, targs)
-                        logger.log(f"[tool] {tname} -> {len(result)} chars")
+                        r = _gw_exec_tool(tname, targs)
+                        results[tc.get("id","")] = r
+                        logger.log(f"[tool] {tname} -> {len(r)} chars")
                     except Exception as te:
-                        result = f"Tool error: {te}"
+                        results[tc.get("id","")] = f"Tool error: {te}"
                 messages.append({"role":"assistant","content":None,"tool_calls":tool_calls})
                 for tc in tool_calls:
-                    fn = tc.get("function",{}); tname = fn.get("name","")
-                    targs_str = fn.get("arguments","{}")
-                    try: targs = json.loads(targs_str) if isinstance(targs_str,str) else targs_str
-                    except: targs = {}
-                    result = _gw_exec_tool(tname, targs) if tname else ""
-                    messages.append({"role":"tool","tool_call_id":tc.get("id",""),"content":str(result)[:4000]})
+                    messages.append({"role":"tool","tool_call_id":tc.get("id",""),"content":str(results.get(tc.get("id",""),"error"))[:4000]})
                 continue
 
             content = msg.get("content","")
