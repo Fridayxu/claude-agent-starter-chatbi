@@ -428,6 +428,9 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
         if not base_url.endswith("/v1"):
             base_url = base_url.rstrip("/") + "/v1"
         model = resolve_model_name()
+        # Fallback for self-paid: try os.environ if ctx.env didn't have it
+        if not model or "@makers" in (model or ""):
+            model = env.get("AI_GATEWAY_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or model
 
         if not api_key:
             yield sse_event("error", {"message": "Missing AI_GATEWAY_API_KEY"})
