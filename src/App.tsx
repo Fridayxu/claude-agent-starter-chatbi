@@ -51,7 +51,7 @@ function toolToLampId(toolName: string): LampId | null {
   const name = toolName.toLowerCase();
   if (name.startsWith('browser') || name.includes('browse')) return 'browser';
   if (name.startsWith('code_interpreter') || name.startsWith('code-interpreter') || name.startsWith('interpreter')) return 'code_interpreter';
-  if (name.startsWith('files') || name.startsWith('file_') || name.startsWith('fs_')) return 'files';
+  if (name.startsWith('files') || name.startsWith('file_') || name.startsWith('fs_') || name.startsWith('read_file') || name.startsWith('list_files')) return 'files';
   if (name.startsWith('commands') || name.startsWith('command_') || name.startsWith('cmd_') || name.startsWith('shell') || name === 'exec') return 'commands';
   if ((LAMP_IDS as readonly string[]).includes(name)) return name as LampId;
   return null;
