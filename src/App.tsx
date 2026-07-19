@@ -674,9 +674,7 @@ function AppInner() {
       },
     }, conversationIdRef.current, { userMsgId: newMsgs[newMsgs.length - 1]?.id || '', botMsgId }, eoUuidRef.current, files.length > 0 ? files : undefined, templateFiles.length > 0 ? templateFiles : undefined, skillFiles.length > 0 ? skillFiles : undefined);
 
-    // Clear uploads after sending
-    if (templateFiles.length > 0) setTemplateFiles([]);
-    if (skillFiles.length > 0) setSkillFiles([]);
+    // Templates & skills persist — user removes them manually from Activity panel
 
     abortCtrlRef.current = ctrl;
   }, [updateBotMessage, setBotActivity, finishBotActivity, clearBotStreaming, handleImageEvent, finishStream, refreshConversations, t]);
