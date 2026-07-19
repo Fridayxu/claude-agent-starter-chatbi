@@ -424,10 +424,10 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     # Gateway Direct for ALL requests
     env = ctx.env
     api_key = env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY", "")
-    base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://api.deepseek.com/v1")
+    base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://ai-gateway.edgeone.link/v1")
     if not base_url.endswith("/v1"):
         base_url = base_url.rstrip("/") + "/v1"
-    model = env.get("AI_GATEWAY_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or "deepseek-chat"
+    model = env.get("AI_GATEWAY_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or "deepseek/deepseek-v4-pro"
 
     if not api_key:
         yield sse_event("error", {"message": "Missing AI_GATEWAY_API_KEY"})
