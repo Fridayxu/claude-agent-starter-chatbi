@@ -25,9 +25,12 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import glob
 import httpx
 import os
+import subprocess
 import time
+from pathlib import Path
 from typing import Any, AsyncGenerator
 from uuid import UUID
 
@@ -273,9 +276,8 @@ async def _gateway_direct_stream(
             break
 
     # Auto-detect generated files
-    import glob as _g
     for _ext in ("xlsx","pdf","png","html"):
-        for _fp in _g.glob(f"/tmp/*.{_ext}"):
+        for _fp in glob.glob(f"/tmp/*.{_ext}"):
             try:
                 _fn = os.path.basename(_fp)
                 with open(_fp,"rb") as _fh: _b64 = base64.b64encode(_fh.read()).decode()
