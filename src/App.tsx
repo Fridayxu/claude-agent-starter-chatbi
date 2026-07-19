@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo, type ChangeEvent } from 'react';
 import type {
   Message,
   ToolLampState,
@@ -28,6 +28,7 @@ import { saveSnapshot, loadSnapshot, deleteSnapshot } from './lib/chatUiStore';
 import ToolIndicators from './components/ToolIndicators';
 import ChatWindow from './components/ChatWindow';
 import ChatInput from './components/ChatInput';
+import type { FileInfo } from './components/ChatInput';
 import ConversationSidebar from './components/ConversationSidebar';
 import GitHubLink from './components/GitHubLink';
 import DeployLink from './components/DeployLink';
@@ -132,6 +133,24 @@ function AppInner() {
   const [skillInUse, setSkillInUse] = useState<string | null>(null);
   const [statusText, setStatusText] = useState('');
   const [downloads, setDownloads] = useState<Array<{name:string,onClick:()=>void}>>([]);
+  const [templateFiles, setTemplateFiles] = useState<FileInfo[]>([]);
+  const templateInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTemplateUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    for (const file of e.target.files || []) {
+      if (!file.name.endsWith('.yaml') && !file.name.endsWith('.yml')) {
+        alert('仅支持 .yaml 模板文件');
+        continue;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const b64 = (reader.result as string).split(',')[1] || '';
+        setTemplateFiles(prev => [...prev, { name: file.name, content: b64, mimeType: 'text/yaml' }]);
+      };
+      reader.readAsDataURL(file);
+    }
+    if (e.target) e.target.value = '';
+  };
 
   // Conversation list state (left sidebar)
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -635,7 +654,10 @@ function AppInner() {
         updateBotMessage(content => content || t("status.error"));
         finishStream();
       },
-    }, conversationIdRef.current, { userMsgId: newMsgs[newMsgs.length - 1]?.id || '', botMsgId }, eoUuidRef.current, files.length > 0 ? files : undefined);
+    }, conversationIdRef.current, { userMsgId: newMsgs[newMsgs.length - 1]?.id || '', botMsgId }, eoUuidRef.current, files.length > 0 ? files : undefined, templateFiles.length > 0 ? templateFiles : undefined);
+
+    // Clear templates after sending
+    if (templateFiles.length > 0) setTemplateFiles([]);
 
     abortCtrlRef.current = ctrl;
   }, [updateBotMessage, setBotActivity, finishBotActivity, clearBotStreaming, handleImageEvent, finishStream, refreshConversations, t]);
@@ -847,6 +869,31 @@ function AppInner() {
                 📥 {d.name}
               </button>
             ))}
+          </div>
+          {/* Template upload section */}
+          <div style={{borderTop:'1px solid var(--border-color)',padding:'10px 14px',flexShrink:0}}>
+            <div style={{fontSize:'.65rem',fontWeight:600,color:'var(--text-secondary)',marginBottom:'6px',textTransform:'uppercase',letterSpacing:'.04em'}}>📋 Templates</div>
+            <input ref={templateInputRef} type="file" accept=".yaml,.yml" onChange={handleTemplateUpload} style={{display:'none'}} />
+            <button
+              onClick={() => templateInputRef.current?.click()}
+              disabled={loading}
+              style={{
+                width:'100%',padding:'5px 10px',borderRadius:'var(--radius-sm)',
+                border:'1px dashed var(--border-color)',background:'transparent',
+                color:'var(--text-muted)',fontSize:'.62rem',cursor:'pointer',
+                fontFamily:'var(--font-code)',textAlign:'center'
+              }}>
+              + Upload .yaml template
+            </button>
+            {templateFiles.map((f,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:'4px',marginTop:'4px',fontSize:'.6rem',color:'var(--text-secondary)'}}>
+                📄 {f.name}
+                <button onClick={()=>setTemplateFiles(prev=>prev.filter((_,j)=>j!==i))} style={{marginLeft:'auto',background:'none',border:'none',color:'var(--text-muted)',cursor:'pointer'}}>×</button>
+              </div>
+            ))}
+            {templateFiles.length===0 && (
+              <div style={{fontSize:'.55rem',color:'var(--text-muted)',marginTop:'4px'}}>默认: sales, finance, HR, ops, marketing</div>
+            )}
           </div>
         </div>
       </div>

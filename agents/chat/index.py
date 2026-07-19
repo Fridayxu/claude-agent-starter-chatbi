@@ -269,6 +269,26 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
     body = ctx.request.body
     user_message: str = body.get("message", "") if isinstance(body, dict) else ""
     uploaded_files: list[dict] = body.get("files", []) if isinstance(body, dict) else []
+    uploaded_templates: list[dict] = body.get("templates", []) if isinstance(body, dict) else []
+
+    # Handle template uploads — save to /tmp/user-templates/
+    template_paths: list[str] = []
+    if uploaded_templates:
+        sandbox = getattr(ctx, "sandbox", None)
+        for tpl in uploaded_templates:
+            tpl_name = tpl.get("name", "template.yaml")
+            tpl_content = tpl.get("content", "")
+            tpl_path = f"/tmp/user-templates/{tpl_name}"
+            try:
+                raw = base64.b64decode(tpl_content)
+                text = raw.decode("utf-8", errors="replace")
+                if sandbox and hasattr(sandbox, "files"):
+                    await sandbox.files.make_dir("/tmp/user-templates")
+                    await sandbox.files.write(tpl_path, text)
+                    template_paths.append(tpl_path)
+                    logger.log(f"[template] saved {tpl_name} to {tpl_path}")
+            except Exception as e:
+                logger.error(f"[template] failed to save {tpl_name}: {e}")
 
     # Handle file uploads — write to sandbox via ctx.sandbox.files.write()
     file_paths: list[str] = []
@@ -332,6 +352,12 @@ async def handler(ctx: Any) -> AsyncGenerator[str, None]:
                 user_message = file_note + "Analyze these files."
             else:
                 user_message = file_note + user_message
+
+    # Add template info to message
+    if template_paths:
+        tpl_list = "\n".join(f"  - {p}" for p in template_paths)
+        tpl_note = f"\n\nUser uploaded report templates:\n{tpl_list}\nUse these templates instead of defaults. Read with code_interpreter: `open('/tmp/user-templates/filename')`\n"
+        user_message = (user_message or "") + tpl_note
 
     logger.log(f"[file] {len(file_paths)} files in sandbox, message size={len(user_message)} chars")
 
