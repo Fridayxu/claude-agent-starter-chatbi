@@ -51,7 +51,7 @@ function toolToLampId(toolName: string): LampId | null {
   const name = toolName.toLowerCase();
   if (name.startsWith('browser') || name.includes('browse')) return 'browser';
   if (name.startsWith('code_interpreter') || name.startsWith('code-interpreter') || name.startsWith('interpreter')) return 'code_interpreter';
-  if (name.startsWith('files') || name.startsWith('file_') || name.startsWith('fs_') || name.startsWith('read_file') || name.startsWith('list_files')) return 'files';
+  if (name.startsWith('files') || name.startsWith('file_') || name.startsWith('fs_')) return 'files';
   if (name.startsWith('commands') || name.startsWith('command_') || name.startsWith('cmd_') || name.startsWith('shell') || name === 'exec') return 'commands';
   if ((LAMP_IDS as readonly string[]).includes(name)) return name as LampId;
   return null;
@@ -135,7 +135,6 @@ function AppInner() {
   const [downloads, setDownloads] = useState<Array<{name:string,onClick:()=>void}>>([]);
   const [templateFiles, setTemplateFiles] = useState<FileInfo[]>([]);
   const [skillFiles, setSkillFiles] = useState<FileInfo[]>([]);
-  const [recentCalls, setRecentCalls] = useState<string[]>([]);
   const templateInputRef = useRef<HTMLInputElement>(null);
   const skillInputRef = useRef<HTMLInputElement>(null);
 
@@ -445,7 +444,6 @@ function AppInner() {
     setLamps(prev => prev.map(l => ({ ...l, active: false })));
     setSkillInUse(null);
     setDownloads([]);
-    setRecentCalls([]);
 
     const newMsgs: Message[] = [];
 
@@ -535,7 +533,14 @@ function AppInner() {
       },
 
       onToolCalled(toolName) {
-        setRecentCalls(prev => [...prev.slice(-9), toolName]);
+        // Show activity indicator for all tool calls
+        const toolLabels: Record<string,string> = {
+          code_interpreter:'Python', commands:'Shell', files_list:'Listing files',
+          files_read:'Reading file', files_write:'Writing file',
+          browser:'Browser', web_search:'Searching',
+        };
+        const label = toolLabels[toolName] || toolName;
+        setBotActivity({ type: 'tool', label: 'calling '+label+'...', status: 'active' });
 
         const lampId = toolToLampId(toolName);
         if (!lampId) return;
@@ -547,6 +552,7 @@ function AppInner() {
               : l
           )
         );
+        // Lamp stays lit — cleared on next user message
       },
 
       onImage(payload) {
@@ -867,13 +873,6 @@ function AppInner() {
               <div key={l.id} className={styles.activityItem}>
                 <span className={`${styles.activityDot} ${styles.tool}`} />
                 {l.icon} {l.label}
-              </div>
-            ))}
-            {/* Recent tool calls with real function names */}
-            {recentCalls.map((name,i)=>(
-              <div key={'rc-'+i} className={styles.activityItem}>
-                <span className={`${styles.activityDot} ${styles.tool}`} />
-                {name}
               </div>
             ))}
             {/* Active user-uploaded skills */}
