@@ -1,21 +1,21 @@
 const zh = {
   // Header
-  "app.title": "ChatBI Agent",
-  "app.subtitle": "供应链数据分析智能体 · 自然语言驱动的数据报表生成",
+  "app.title": "ChatBI",
+  "app.subtitle": "自然语言 → 数据分析 → 自动报表",
 
   // Empty state
-  "empty.title": "ChatBI — 供应链数据分析助手",
-  "empty.hint": "上传 CSV/Excel 数据文件，用自然语言描述分析需求，我将自动完成数据探索、预测分析、库存优化、定价策略等任务。",
-  "empty.features": "沙箱Python分析 · 会话记忆 · Harness六层架构 · 自动报表",
+  "empty.title": "ChatBI — 数据智能报表助手",
+  "empty.hint": "上传 Excel/CSV 数据，用自然语言描述你要的分析。自动完成：数据清洗 → 探索分析 → 图表看板 → 报表导出。不再手动做表。",
+  "empty.features": "自然语言驱动 · 自动报表生成 · 多格式导出 · Harness方法论",
 
   // Chat input
-  "chat.placeholder": "上传数据文件，输入分析需求…  ⏎ 发送 · Shift+⏎ 换行",
-  "chat.hint": "ChatBI Agent · Claude Agent SDK + EdgeOne Makers + Harness Engineering",
+  "chat.placeholder": "上传数据，告诉我你想分析什么…  ⏎ 发送 · Shift+⏎ 换行",
+  "chat.hint": "ChatBI · 自然语言 → 数据报表 · Powered by EdgeOne Makers + Harness",
 
   // Preset questions
-  "preset.1": "上传CSV文件并进行数据探索分析(EDA)",
-  "preset.2": "基于销售数据做需求预测",
-  "preset.3": "对库存进行ABC/XYZ分类分析",
+  "preset.1": "上传数据并生成分析看板（HTML图表）",
+  "preset.2": "分析数据趋势并导出Excel报表",
+  "preset.3": "对比不同维度的数据并给出结论",
 
   // Tool indicators
   "tool.commands": "终端命令",

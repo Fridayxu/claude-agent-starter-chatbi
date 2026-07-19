@@ -1,7 +1,7 @@
 const en = {
   // Header
-  "app.title": "ChatBI Agent",
-  "app.subtitle": "Supply Chain Data Analyst · Natural Language to Data Reports",
+  "app.title": "ChatBI",
+  "app.subtitle": "Natural Language → Data Analysis → Auto Reports",
 
   // Empty state
   "empty.title": "ChatBI — Supply Chain Analyst",
