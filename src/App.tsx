@@ -533,11 +533,6 @@ function AppInner() {
       },
 
       onToolCalled(toolName) {
-        // Show skill usage when Skill tool is called
-        if (toolName === 'Skill' || toolName === 'load_skill') {
-          setSkillInUse(toolName === 'Skill' ? 'skill' : toolName);
-        }
-
         const lampId = toolToLampId(toolName);
         if (!lampId) return;
 
