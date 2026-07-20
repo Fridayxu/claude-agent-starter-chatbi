@@ -450,11 +450,10 @@ function AppInner() {
     // File cards: separate from text
     if (files.length) {
       files.forEach(f => {
-        const ext = (f.name || '').split('.').pop()?.toUpperCase() || 'FILE';
         newMsgs.push({
           id: crypto.randomUUID(),
           role: 'user',
-          content: `📄 **${f.name}**   \`${ext}\``,
+          content: `📄 ${f.name}`,
           timestamp: Date.now(),
         });
       });
