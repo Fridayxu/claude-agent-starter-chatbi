@@ -129,14 +129,20 @@ async def handler(ctx):
         for m in messages[-10:]  # Last 10 messages
     )
 
-    # ── Call Gateway Direct to analyze ──
+    # ── Call AI Gateway to analyze ──
     env = getattr(ctx, "env", {}) or {}
-    api_key = env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY", "")
-    base_url = env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL", "https://ai-gateway.edgeone.link/v1")
-    model = env.get("AI_GATEWAY_MODEL") or os.environ.get("AI_GATEWAY_MODEL", "@makers/deepseek-v4-flash")
+    # Try multiple sources for credentials (platform auto-inject varies)
+    api_key = (env.get("AI_GATEWAY_API_KEY") or os.environ.get("AI_GATEWAY_API_KEY") or
+               os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("MAKERS_MODELS_KEY", ""))
+    base_url = (env.get("AI_GATEWAY_BASE_URL") or os.environ.get("AI_GATEWAY_BASE_URL") or
+                os.environ.get("ANTHROPIC_BASE_URL") or "https://ai-gateway.edgeone.link/v1")
+    if not base_url.endswith("/v1"):
+        base_url = base_url.rstrip("/") + "/v1"
+    model = (env.get("AI_GATEWAY_MODEL") or os.environ.get("AI_GATEWAY_MODEL") or
+             os.environ.get("CLAUDE_MODEL") or "@makers/deepseek-v4-flash")
 
     if not api_key:
-        return {"action": "ERROR", "reason": "missing API key"}
+        return {"action": "SKIP", "reason": "no API key available (will retry next conversation)"}
 
     prompt = EVOLVE_PROMPT.format(conversation=conv_text, skill=current_skill[:3000])
 
