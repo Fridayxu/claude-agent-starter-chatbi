@@ -836,7 +836,6 @@ function AppInner() {
               <span className={styles.title}>{t("app.title")}</span>
             </div>
             <ToolIndicators lamps={lamps} />
-            {skillInUse && <span className={styles.skillsLoading}>● {skillInUse}</span>}
           </header>
 
           <div className={styles.chatWindowShell}>
@@ -866,6 +865,13 @@ function AppInner() {
                 {l.icon} {l.label}
               </div>
             ))}
+            {/* SDK-loaded skills */}
+            {skillInUse && (
+              <div className={styles.activityItem}>
+                <span className={`${styles.activityDot} ${styles.skill}`} />
+                Skill: {skillInUse}
+              </div>
+            )}
             {/* Active user-uploaded skills */}
             {skillFiles.map((f,i)=>(
               <div key={'sk-'+i} className={styles.activityItem}>
