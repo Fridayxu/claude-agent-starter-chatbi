@@ -533,14 +533,10 @@ function AppInner() {
       },
 
       onToolCalled(toolName) {
-        // Show activity indicator for all tool calls
-        const toolLabels: Record<string,string> = {
-          code_interpreter:'Python', commands:'Shell', files_list:'Listing files',
-          files_read:'Reading file', files_write:'Writing file',
-          browser:'Browser', web_search:'Searching',
-        };
-        const label = toolLabels[toolName] || toolName;
-        setBotActivity({ type: 'tool', label: 'calling '+label+'...', status: 'active' });
+        // Show skill usage when Skill tool is called
+        if (toolName === 'Skill' || toolName === 'load_skill') {
+          setSkillInUse(toolName === 'Skill' ? 'skill' : toolName);
+        }
 
         const lampId = toolToLampId(toolName);
         if (!lampId) return;
